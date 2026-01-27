@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>HyperbookLM Python</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="container header-inner">
+        <div>
+          <h1>Research Notebook</h1>
+        </div>
+        <div class="header-actions">
+          <button id="toggle-sources" type="button" class="ghost">Hide Sources</button>
+          <button id="clear-btn" type="button" class="secondary">Clear All</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="layout">
+        <aside class="panel sources-panel">
+          <div class="panel-header">
+            <h2>Sources</h2>
+            <div class="status-group">
+              <span id="index-status" class="status"></span>
+              <div class="progress">
+                <div id="index-progress" class="progress-bar"></div>
+              </div>
+            </div>
+          </div>
+          <div class="project-card">
+            <div class="project-row">
+              <label for="project-select">Project</label>
+              <select id="project-select"></select>
+            </div>
+            <div class="project-actions">
+              <button id="project-new" type="button" class="ghost">New</button>
+              <button id="project-delete" type="button" class="ghost">Delete</button>
+            </div>
+            <div class="project-actions">
+              <input id="project-import-input" type="file" accept=".zip" hidden />
+              <button id="project-import" type="button" class="ghost">Import Project</button>
+              <button id="project-export" type="button" class="ghost">Export Project</button>
+            </div>
+          </div>
+          <div class="sources-actions">
+            <button id="index-btn" type="button">Reindex</button>
+          </div>
+          <form id="url-form" class="input-card compact">
+            <label>Добавить URL</label>
+            <input id="url-input" type="url" placeholder="https://example.com" />
+            <button type="submit">Add URL</button>
+          </form>
+
+          <form id="file-form" class="input-card compact">
+            <label>Загрузить файл</label>
+            <input id="file-input" type="file" />
+            <button type="submit">Upload File</button>
+            <p class="hint">
+              Поддержка: PDF, DOC/DOCX, PPT/PPTX, XLS/XLSX, RTF, ODT, CSV,
+              изображения (OCR), TXT, архивы, исходный код, EPUB и др.
+            </p>
+          </form>
+
+          <form id="audio-form" class="input-card compact">
+            <label>Загрузить аудио (STT)</label>
+            <input id="audio-input" type="file" accept="audio/*" />
+            <button type="submit">Transcribe</button>
+          </form>
+
+          <div id="sources-list" class="list"></div>
+        </aside>
+
+        <section class="panel chat-panel">
+          <div class="panel-header">
+            <h2>Chat</h2>
+            <div class="panel-actions">
+              <label class="toggle">
+                <input id="chat-use-sources" type="checkbox" checked />
+                <span>Use sources</span>
+              </label>
+              <button type="button" class="ghost summary-btn">Summary</button>
+              <button type="button" class="ghost" data-copy="chat">Copy</button>
+            </div>
+          </div>
+          <div id="chat-messages" class="chat"></div>
+          <form id="chat-form" class="chat-input">
+            <textarea id="chat-input" rows="3" placeholder="Спросите что-нибудь о источниках"></textarea>
+            <button type="submit">Send</button>
+          </form>
+        </section>
+
+        <aside class="panel outputs-panel">
+          <div class="output-card">
+            <div class="panel-header">
+              <h3>Поиск по индексам</h3>
+              <div class="panel-actions">
+                <button id="search-btn" type="button" class="ghost">Search</button>
+                <button type="button" class="ghost" data-copy="search">Copy</button>
+              </div>
+            </div>
+            <div class="search-row">
+              <input id="search-query" type="text" placeholder="Введите запрос" />
+              <input id="search-topk" type="number" min="1" value="5" />
+            </div>
+            <div id="search-results" class="list muted search-results"></div>
+          </div>
+
+          <div class="output-card">
+            <div class="panel-header">
+              <h3>Транскрипция</h3>
+              <div class="panel-actions">
+                <button type="button" class="ghost" data-copy="transcript">Copy</button>
+              </div>
+            </div>
+            <div id="transcript-output" class="output transcript"></div>
+          </div>
+
+          <div class="output-card">
+            <div class="panel-header">
+              <h3>Research Summary</h3>
+              <div class="panel-actions">
+                <button type="button" class="ghost summary-btn">Generate</button>
+                <button type="button" class="ghost" data-copy="summary">Copy</button>
+              </div>
+            </div>
+            <div id="summary-output" class="output rich"></div>
+          </div>
+
+          <div class="output-card">
+            <div class="panel-header">
+              <h3>Mindmap</h3>
+              <div class="panel-actions">
+                <button id="mindmap-btn" type="button" class="ghost">Generate</button>
+                <button type="button" class="ghost" data-copy="mindmap">Copy</button>
+              </div>
+            </div>
+            <div id="mindmap-output" class="output tree"></div>
+          </div>
+
+          <div class="output-card">
+            <div class="panel-header">
+              <h3>Slides</h3>
+              <div class="panel-actions">
+                <button id="slides-btn" type="button" class="ghost">Generate</button>
+                <button type="button" class="ghost" data-copy="slides">Copy</button>
+              </div>
+            </div>
+            <div id="slides-output" class="slides-grid"></div>
+          </div>
+
+        </aside>
+      </div>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
