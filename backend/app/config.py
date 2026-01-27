@@ -52,6 +52,10 @@ SCRAPE_USER_AGENT = env(
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0 Safari/537.36",
 )
+SCRAPE_CA_CERT_PATH = env("SCRAPE_CA_CERT_PATH", "") or ""
+REQUESTS_CA_BUNDLE = env("REQUESTS_CA_BUNDLE", "") or ""
+if SCRAPE_CA_CERT_PATH and not os.getenv("REQUESTS_CA_BUNDLE") and not os.getenv("SSL_CERT_FILE"):
+    os.environ["REQUESTS_CA_BUNDLE"] = SCRAPE_CA_CERT_PATH
 SCRAPE_TIMEOUT_SECONDS = env_float("SCRAPE_TIMEOUT_SECONDS", 30.0)
 MAX_SCRAPE_CHARS = env_int("MAX_SCRAPE_CHARS", 200000)
 MAX_SOURCE_CHARS = env_int("MAX_SOURCE_CHARS", 200000)

@@ -5,7 +5,12 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from .config import MAX_SCRAPE_CHARS, SCRAPE_TIMEOUT_SECONDS, SCRAPE_USER_AGENT
+from .config import (
+    MAX_SCRAPE_CHARS,
+    SCRAPE_CA_CERT_PATH,
+    SCRAPE_TIMEOUT_SECONDS,
+    SCRAPE_USER_AGENT,
+)
 
 
 BLOCKLIST_PATTERNS = [
@@ -137,8 +142,9 @@ def _extract_clean_text(soup: BeautifulSoup) -> str:
 async def scrape_url(url: str) -> Tuple[str, str, str, str]:
     headers = {"User-Agent": SCRAPE_USER_AGENT}
     timeout = httpx.Timeout(SCRAPE_TIMEOUT_SECONDS)
+    verify = SCRAPE_CA_CERT_PATH if SCRAPE_CA_CERT_PATH else True
     async with httpx.AsyncClient(
-        headers=headers, follow_redirects=True, timeout=timeout
+        headers=headers, follow_redirects=True, timeout=timeout, verify=verify
     ) as client:
         response = await client.get(url)
         response.raise_for_status()
