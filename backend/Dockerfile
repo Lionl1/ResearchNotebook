@@ -8,6 +8,7 @@ ENV HTTP_PROXY=
 ENV HTTPS_PROXY=
 
 RUN apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-recommends \
+    ca-certificates \
     libgomp1 \
     libmagic1 \
     ffmpeg \
@@ -19,6 +20,14 @@ RUN apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-reco
     unrar-free \
     p7zip-full \
   && rm -rf /var/lib/apt/lists/*
+
+ARG CUSTOM_CA_CERT=backend/certs/ca.crt
+COPY ${CUSTOM_CA_CERT} /usr/local/share/ca-certificates/custom-ca.crt
+RUN update-ca-certificates
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
 
 COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt

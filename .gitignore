@@ -3,6 +3,7 @@
 
 .env
 .env.local
+backend/certs/
 
 .venv/
 __pycache__/
