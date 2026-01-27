@@ -21,8 +21,7 @@ RUN apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-reco
     p7zip-full \
   && rm -rf /var/lib/apt/lists/*
 
-ARG CUSTOM_CA_CERT=backend/certs/ca.crt
-COPY ${CUSTOM_CA_CERT} /usr/local/share/ca-certificates/custom-ca.crt
+COPY backend/certs/ /usr/local/share/ca-certificates/
 RUN update-ca-certificates
 
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt

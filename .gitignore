@@ -3,7 +3,8 @@
 
 .env
 .env.local
-backend/certs/
+backend/certs/*
+!backend/certs/.keep
 
 .venv/
 __pycache__/
