@@ -208,6 +208,47 @@ h1 {
   margin-bottom: 12px;
 }
 
+.settings-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: #f6f1e7;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-card h3 {
+  margin: 0;
+  font-family: "Spectral", serif;
+  font-size: 15px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+
+.settings-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.settings-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .input-card.compact {
   padding: 10px;
   gap: 6px;
@@ -228,6 +269,16 @@ label {
 
 input,
 button {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+select {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);

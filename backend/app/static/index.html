@@ -46,6 +46,29 @@
               <button id="project-export" type="button" class="ghost">Export Project</button>
             </div>
           </div>
+          <div class="settings-card">
+            <div class="settings-header">
+              <h3>LLM настройки</h3>
+              <button id="settings-reset" type="button" class="ghost">Reset</button>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-field">
+                <label for="temperature-input">Температура</label>
+                <input id="temperature-input" type="number" step="0.1" min="0" max="2" />
+              </div>
+              <div class="settings-field">
+                <label for="max-tokens-input">Макс. токенов</label>
+                <input id="max-tokens-input" type="number" min="1" />
+              </div>
+              <div class="settings-field">
+                <label for="retrieval-topk-input">TopK источников для чата</label>
+                <input id="retrieval-topk-input" type="number" min="1" />
+              </div>
+            </div>
+            <p class="settings-hint">
+              Оставьте поле пустым, чтобы использовать значения по умолчанию сервера.
+            </p>
+          </div>
           <div class="sources-actions">
             <button id="index-btn" type="button">Reindex</button>
           </div>

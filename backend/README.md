@@ -1,7 +1,7 @@
 # Python Backend (FastAPI)
 
 Single-service backend that serves a lightweight UI, handles ingestion, indexing,
-search, and LLM calls via a local vLLM server. Chunking uses LangChain utilities
+search, and LLM calls via an OpenAI-compatible server (vLLM or LM Studio). Chunking uses LangChain utilities
 and vectors are stored in ChromaDB. File parsing is расширен через интеграцию
 с `extract-text` (see `backend/third_party/extract-text`).
 
@@ -18,13 +18,21 @@ Open: `http://localhost:8080`
 
 ## Environment
 
-Required for LLM:
+LLM (OpenAI-compatible):
 - `VLLM_API_BASE` (default: `http://localhost:8000/v1`)
-- `VLLM_API_KEY` (default: `sk`)
+- `VLLM_API_KEY` (default: `sk`, set empty to omit auth header)
 - `VLLM_MODEL` (default: `Qwen/Qwen2.5-7B-Instruct`)
+
+LM Studio example:
+```bash
+VLLM_API_BASE=http://localhost:1234/v1
+VLLM_API_KEY=
+VLLM_MODEL=your-model-name
+```
 Embeddings (local, CPU by default):
 - `EMBEDDINGS_MODEL` (default: `intfloat/multilingual-e5-base`)
 - `EMBEDDINGS_DEVICE` (default: `cpu`)
+- `HF_TOKEN` (optional, for private Hugging Face models)
 
 Local STT:
 - `STT_PROVIDER=faster-whisper`

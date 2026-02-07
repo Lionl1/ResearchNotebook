@@ -22,14 +22,12 @@ def _bootstrap_extract_text() -> bool:
 _AVAILABLE = False
 _TextExtractor = None
 _is_supported_format = None
-_get_file_extension = None
 _settings = None
 
 if _bootstrap_extract_text():
     try:
         from app.extractors import TextExtractor as _TextExtractor  # type: ignore
         from app.utils import is_supported_format as _is_supported_format  # type: ignore
-        from app.utils import get_file_extension as _get_file_extension  # type: ignore
         from app.config import settings as _settings  # type: ignore
 
         _AVAILABLE = True

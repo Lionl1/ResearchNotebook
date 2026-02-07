@@ -1,7 +1,0 @@
----
-title: "Пример RMarkdown"
----
-
-```{r}
-print("Hello, RMarkdown!")
-``` 

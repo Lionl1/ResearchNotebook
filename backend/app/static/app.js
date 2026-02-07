@@ -1,4 +1,10 @@
 const DEFAULT_NOTEBOOK_ID = "nb-1";
+const SETTINGS_STORAGE_KEY = "llmSettings";
+const DEFAULT_SETTINGS = {
+  temperature: null,
+  maxTokens: null,
+  retrievalTopK: null,
+};
 const state = {
   projects: [],
   activeProjectId: DEFAULT_NOTEBOOK_ID,
@@ -12,6 +18,11 @@ const state = {
   slides: [],
   transcriptSegments: [],
   transcriptText: "",
+  settings: { ...DEFAULT_SETTINGS },
+  settingsDefaults: {
+    maxTokens: null,
+    retrievalTopK: null,
+  },
 };
 
 const el = (id) => document.getElementById(id);
@@ -35,6 +46,10 @@ const projectExportBtn = el("project-export");
 const audioForm = el("audio-form");
 const audioInput = el("audio-input");
 const chatUseSourcesToggle = el("chat-use-sources");
+const temperatureInput = el("temperature-input");
+const maxTokensInput = el("max-tokens-input");
+const retrievalTopkInput = el("retrieval-topk-input");
+const settingsResetBtn = el("settings-reset");
 
 const getNotebookId = () => state.activeProjectId || DEFAULT_NOTEBOOK_ID;
 
@@ -117,6 +132,124 @@ const loadProjects = async () => {
     setActiveProject(DEFAULT_NOTEBOOK_ID, { skipLoad: true });
     loadSources();
   }
+};
+
+const loadSettings = () => {
+  const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+  if (!stored) return;
+  try {
+    const parsed = JSON.parse(stored);
+    if (parsed && typeof parsed === "object") {
+      const parsedTemperature = Number(parsed.temperature);
+      const parsedMaxTokens = Number.parseInt(parsed.maxTokens, 10);
+      const parsedTopK = Number.parseInt(parsed.retrievalTopK, 10);
+      state.settings = {
+        ...DEFAULT_SETTINGS,
+        temperature: Number.isFinite(parsedTemperature) ? parsedTemperature : null,
+        maxTokens: Number.isFinite(parsedMaxTokens) ? parsedMaxTokens : null,
+        retrievalTopK: Number.isFinite(parsedTopK) ? parsedTopK : null,
+      };
+    }
+  } catch (err) {
+    state.settings = { ...DEFAULT_SETTINGS };
+  }
+};
+
+const saveSettings = () => {
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(state.settings));
+};
+
+const parseNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const parseInteger = (value) => {
+  const num = Number.parseInt(value, 10);
+  return Number.isFinite(num) ? num : null;
+};
+
+const buildLlmPayload = () => {
+  const payload = {};
+  const temperature = Number.isFinite(state.settings.temperature)
+    ? state.settings.temperature
+    : parseNumber(state.settings.temperature);
+  if (Number.isFinite(temperature)) {
+    payload.temperature = temperature;
+  }
+  const maxTokens = Number.isFinite(state.settings.maxTokens)
+    ? state.settings.maxTokens
+    : parseInteger(state.settings.maxTokens);
+  if (Number.isFinite(maxTokens)) {
+    payload.maxTokens = maxTokens;
+  }
+  return payload;
+};
+
+const renderSettings = () => {
+  if (!temperatureInput && !maxTokensInput && !retrievalTopkInput) return;
+  if (temperatureInput) {
+    temperatureInput.value = Number.isFinite(state.settings.temperature)
+      ? state.settings.temperature
+      : "";
+    temperatureInput.placeholder = "default";
+  }
+  if (maxTokensInput) {
+    maxTokensInput.value = Number.isFinite(state.settings.maxTokens)
+      ? state.settings.maxTokens
+      : "";
+    maxTokensInput.placeholder = state.settingsDefaults.maxTokens
+      ? String(state.settingsDefaults.maxTokens)
+      : "default";
+  }
+  if (retrievalTopkInput) {
+    retrievalTopkInput.value = Number.isFinite(state.settings.retrievalTopK)
+      ? state.settings.retrievalTopK
+      : "";
+    retrievalTopkInput.placeholder = state.settingsDefaults.retrievalTopK
+      ? String(state.settingsDefaults.retrievalTopK)
+      : "default";
+  }
+};
+
+const fetchSettingsDefaults = async () => {
+  try {
+    const res = await fetch("/api/settings");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.error || "Failed to load settings");
+    state.settingsDefaults = {
+      maxTokens: Number.isFinite(data?.llm?.maxTokens) ? data.llm.maxTokens : null,
+      retrievalTopK: Number.isFinite(data?.retrieval?.topK) ? data.retrieval.topK : null,
+    };
+  } catch (err) {
+    state.settingsDefaults = {
+      maxTokens: null,
+      retrievalTopK: null,
+    };
+  } finally {
+    renderSettings();
+  }
+};
+
+const handleSettingsInput = () => {
+  if (temperatureInput) {
+    state.settings.temperature = parseNumber(temperatureInput.value);
+  }
+  if (maxTokensInput) {
+    state.settings.maxTokens = parseInteger(maxTokensInput.value);
+  }
+  if (retrievalTopkInput) {
+    state.settings.retrievalTopK = parseInteger(retrievalTopkInput.value);
+  }
+  saveSettings();
+};
+
+const handleSettingsReset = () => {
+  state.settings.temperature = null;
+  state.settings.maxTokens = null;
+  state.settings.retrievalTopK = null;
+  saveSettings();
+  renderSettings();
 };
 
 
@@ -695,10 +828,11 @@ const handleSummary = async () => {
   summaryOutput.textContent = "Generating...";
   try {
     const context = buildContext();
+    const payload = { context, ...buildLlmPayload() };
     const res = await fetch("/api/summary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ context }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.error || "Summary failed");
@@ -713,10 +847,15 @@ const handleSummary = async () => {
 const handleMindmap = async () => {
   mindmapOutput.textContent = "Generating...";
   try {
+    const payload = {
+      notebookId: getNotebookId(),
+      sources: state.sources,
+      ...buildLlmPayload(),
+    };
     const res = await fetch("/api/gpt/mindmap", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notebookId: getNotebookId(), sources: state.sources }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.error || "Mindmap failed");
@@ -731,10 +870,15 @@ const handleMindmap = async () => {
 const handleSlides = async () => {
   slidesOutput.textContent = "";
   try {
+    const payload = {
+      notebookId: getNotebookId(),
+      sources: state.sources,
+      ...buildLlmPayload(),
+    };
     const res = await fetch("/api/gemini/slides", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notebookId: getNotebookId(), sources: state.sources }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || data.error || "Slides failed");
@@ -760,15 +904,23 @@ const handleChat = async (event) => {
   const useSources = chatUseSourcesToggle ? chatUseSourcesToggle.checked : true;
   const context = useSources ? buildContext() : "";
   try {
+    const payload = {
+      messages: state.messages,
+      context,
+      notebookId: getNotebookId(),
+      useSources,
+      ...buildLlmPayload(),
+    };
+    const retrievalTopK = Number.isFinite(state.settings.retrievalTopK)
+      ? state.settings.retrievalTopK
+      : parseInteger(state.settings.retrievalTopK);
+    if (Number.isFinite(retrievalTopK)) {
+      payload.topK = retrievalTopK;
+    }
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: state.messages,
-        context,
-        notebookId: getNotebookId(),
-        useSources,
-      }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok || !res.body) {
       throw new Error("Chat failed");
@@ -1101,7 +1253,22 @@ if (projectImportBtn && projectImportInput) {
 if (projectExportBtn) {
   projectExportBtn.addEventListener("click", handleProjectExport);
 }
+if (temperatureInput) {
+  temperatureInput.addEventListener("input", handleSettingsInput);
+}
+if (maxTokensInput) {
+  maxTokensInput.addEventListener("input", handleSettingsInput);
+}
+if (retrievalTopkInput) {
+  retrievalTopkInput.addEventListener("input", handleSettingsInput);
+}
+if (settingsResetBtn) {
+  settingsResetBtn.addEventListener("click", handleSettingsReset);
+}
 
 renderSources();
 renderChat();
+loadSettings();
+renderSettings();
+fetchSettingsDefaults();
 loadProjects();

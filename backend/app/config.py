@@ -33,9 +33,13 @@ def env_float(key: str, default: float) -> float:
         return default
 
 
+HF_TOKEN = env("HF_TOKEN", "") or ""
+if HF_TOKEN and not os.getenv("HUGGING_FACE_HUB_TOKEN"):
+    os.environ["HUGGING_FACE_HUB_TOKEN"] = HF_TOKEN
+
 VLLM_API_BASE = (env("VLLM_API_BASE", "http://localhost:8000/v1") or "").rstrip("/")
-VLLM_API_KEY = env("VLLM_API_KEY", "sk") or "sk"
-VLLM_MODEL = env("VLLM_MODEL", "Qwen/Qwen2.5-7B-Instruct") or "Qwen/Qwen2.5-7B-Instruct"
+VLLM_API_KEY = env("VLLM_API_KEY", "sk")
+VLLM_MODEL = env("VLLM_MODEL", "") 
 EMBEDDINGS_MODEL = (
     env("EMBEDDINGS_MODEL")
     or env("VLLM_EMBEDDINGS_MODEL")
@@ -77,8 +81,8 @@ STT_DEVICE = env("STT_DEVICE", "cpu") or "cpu"
 STT_COMPUTE_TYPE = env("STT_COMPUTE_TYPE", "int8") or "int8"
 STT_BEAM_SIZE = env_int("STT_BEAM_SIZE", 5)
 
-GEMINI_API_KEY = env("GEMINI_API_KEY", "") or ""
-VEO_MODEL = env("VEO_MODEL", "veo-3.1-generate-preview") or "veo-3.1-generate-preview"
+GEMINI_API_KEY = env("GEMINI_API_KEY", "")
+VEO_MODEL = env("VEO_MODEL", "")
 
 CORS_ORIGINS = [
     origin.strip()

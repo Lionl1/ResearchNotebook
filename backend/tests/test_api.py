@@ -1,6 +1,7 @@
 import time
 
-from backend.app import main
+from backend.app.api import chat as chat_api
+from backend.app.api import indexing as indexing_api
 from backend.app.config import DEFAULT_NOTEBOOK_ID
 from backend.app.models import Project, Source
 from backend.app.store import PROJECT_STORE, SOURCE_STORE
@@ -59,8 +60,8 @@ def test_index_uses_cached_sources(client, monkeypatch):
         captured["embeddings"] = embeddings
         captured["chunks"] = chunks
 
-    monkeypatch.setattr(main, "embed_texts", fake_embed_texts)
-    monkeypatch.setattr(main.VECTOR_STORE, "replace", fake_replace)
+    monkeypatch.setattr(indexing_api, "embed_texts", fake_embed_texts)
+    monkeypatch.setattr(indexing_api.VECTOR_STORE, "replace", fake_replace)
 
     response = client.post("/api/index", json={"notebookId": DEFAULT_NOTEBOOK_ID})
     assert response.status_code == 200
@@ -70,7 +71,7 @@ def test_index_uses_cached_sources(client, monkeypatch):
 
 
 def test_search_requires_index(client, monkeypatch):
-    monkeypatch.setattr(main.VECTOR_STORE, "has", lambda _: False)
+    monkeypatch.setattr(indexing_api.VECTOR_STORE, "has", lambda _: False)
     response = client.post(
         "/api/search",
         json={"notebookId": DEFAULT_NOTEBOOK_ID, "query": "test"},
@@ -79,7 +80,7 @@ def test_search_requires_index(client, monkeypatch):
 
 
 def test_search_returns_results(client, monkeypatch):
-    monkeypatch.setattr(main.VECTOR_STORE, "has", lambda _: True)
+    monkeypatch.setattr(indexing_api.VECTOR_STORE, "has", lambda _: True)
 
     async def fake_embed_query(_):
         return [0.1, 0.2]
@@ -99,8 +100,8 @@ def test_search_returns_results(client, monkeypatch):
             )
         ]
 
-    monkeypatch.setattr(main, "embed_query", fake_embed_query)
-    monkeypatch.setattr(main.VECTOR_STORE, "search", fake_search)
+    monkeypatch.setattr(indexing_api, "embed_query", fake_embed_query)
+    monkeypatch.setattr(indexing_api.VECTOR_STORE, "search", fake_search)
 
     response = client.post(
         "/api/search",
@@ -116,7 +117,7 @@ def test_summary_uses_llm(client, monkeypatch):
     async def fake_summary(*_, **__):
         return "summary text"
 
-    monkeypatch.setattr(main, "chat_completion_text", fake_summary)
+    monkeypatch.setattr(chat_api, "chat_completion_text", fake_summary)
     response = client.post("/api/summary", json={"context": "hello"})
     payload = response.json()
     assert response.status_code == 200
@@ -124,13 +125,13 @@ def test_summary_uses_llm(client, monkeypatch):
 
 
 def test_chat_streaming(client, monkeypatch):
-    monkeypatch.setattr(main.VECTOR_STORE, "has", lambda _: False)
+    monkeypatch.setattr(chat_api.VECTOR_STORE, "has", lambda _: False)
 
     async def fake_stream(_):
         yield "Hello "
         yield "world"
 
-    monkeypatch.setattr(main, "stream_chat_completion", fake_stream)
+    monkeypatch.setattr(chat_api, "stream_chat_completion", fake_stream)
     response = client.post(
         "/api/chat",
         json={

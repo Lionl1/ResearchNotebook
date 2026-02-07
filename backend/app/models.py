@@ -31,20 +31,28 @@ class Message(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class LLMOptions(BaseModel):
+    temperature: Optional[float] = None
+    maxTokens: Optional[int] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class ScrapeRequest(BaseModel):
     url: str
     notebookId: Optional[str] = None
 
 
-class SummaryRequest(BaseModel):
+class SummaryRequest(LLMOptions):
     context: Optional[str] = None
 
 
-class ChatRequest(BaseModel):
+class ChatRequest(LLMOptions):
     messages: List[Message] = Field(default_factory=list)
     context: Optional[str] = None
     notebookId: Optional[str] = None
     useSources: Optional[bool] = True
+    topK: Optional[int] = None
 
     model_config = ConfigDict(extra="ignore")
 
@@ -53,6 +61,10 @@ class NotebookRequest(BaseModel):
     notebookId: str
     sources: List[Source] = Field(default_factory=list)
 
+    model_config = ConfigDict(extra="ignore")
+
+
+class LLMNotebookRequest(NotebookRequest, LLMOptions):
     model_config = ConfigDict(extra="ignore")
 
 

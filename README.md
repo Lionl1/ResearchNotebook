@@ -1,8 +1,8 @@
 # HyperbookLM (Python)
 
-Local research assistant built on FastAPI with vLLM for LLM calls, embeddings-based
-search, and local STT for audio transcription. Includes a lightweight browser UI served by the
-backend for quick testing.
+Local research assistant built on FastAPI with an OpenAI-compatible LLM endpoint
+(vLLM or LM Studio), embeddings-based search, and local STT for audio transcription.
+Includes a lightweight browser UI served by the backend for quick testing.
 
 ## Features
 
@@ -12,6 +12,7 @@ backend for quick testing.
 - Summary, mindmap, slides generation
 - Streaming chat
 - Audio transcription (STT)
+- LLM settings in the UI (temperature, max tokens, retrieval topK)
 
 ## Quick Start (Local)
 
@@ -29,18 +30,17 @@ More details: `backend/README.md`
 
 ## Quick Start (Docker)
 
+Build image:
 ```bash
 docker build -t hyperbooklm-backend -f backend/Dockerfile .
-docker run --env-file .env.local -p 8080:8000 hyperbooklm-backend
 ```
 
-Container-only run (no local venv):
-
+Run:
 ```bash
 docker run --env-file .env.local -p 8080:8000 hyperbooklm-backend
 ```
 
-If vLLM runs on the host, set:
+If the LLM server runs on the host, set:
 
 ```bash
 VLLM_API_BASE=http://host.docker.internal:8080/v1
@@ -48,13 +48,22 @@ VLLM_API_BASE=http://host.docker.internal:8080/v1
 
 ## Environment
 
-Required:
+LLM (OpenAI-compatible):
 - `VLLM_API_BASE` (default: `http://localhost:8000/v1`)
-- `VLLM_API_KEY` (default: `sk`)
+- `VLLM_API_KEY` (default: `sk`, set empty to omit auth header)
 - `VLLM_MODEL` (default: `Qwen/Qwen2.5-7B-Instruct`)
+
+LM Studio example:
+```bash
+VLLM_API_BASE=http://localhost:1234/v1
+VLLM_API_KEY=
+VLLM_MODEL=your-model-name
+```
+
 Embeddings (local):
 - `EMBEDDINGS_MODEL` (default: `intfloat/multilingual-e5-base`)
 - `EMBEDDINGS_DEVICE` (default: `cpu`)
+- `HF_TOKEN` (optional, for private Hugging Face models)
 
 Local STT:
 - `STT_PROVIDER=faster-whisper`
@@ -76,13 +85,24 @@ Optional:
 hyperbooklm/
 ├── backend/
 │   ├── app/
+│   │   ├── api/
+│   │   │   ├── chat.py
+│   │   │   ├── content.py
+│   │   │   ├── gpt.py
+│   │   │   ├── indexing.py
+│   │   │   ├── projects.py
+│   │   │   ├── sources.py
+│   │   │   └── veo.py
 │   │   ├── main.py
 │   │   ├── embeddings.py
 │   │   ├── vector_store.py
+│   │   ├── extract_text.py
 │   │   ├── static/
 │   │   │   ├── index.html
 │   │   │   ├── styles.css
 │   │   │   └── app.js
+│   ├── third_party/
+│   │   └── extract-text/
 │   └── requirements.txt
 ├── .env.local.example
 └── README.md
