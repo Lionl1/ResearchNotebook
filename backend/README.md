@@ -8,10 +8,8 @@ and vectors are stored in ChromaDB. File parsing is расширен через 
 ## Run
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload --port 8080
+uv sync
+uv run uvicorn backend.app.main:app --reload --port 8080
 ```
 
 Open: `http://localhost:8080`

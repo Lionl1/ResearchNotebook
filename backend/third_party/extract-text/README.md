@@ -653,24 +653,18 @@ docker-compose down
 ### Локальная разработка
 
 ```bash
-# Создание виртуального окружения
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# или
-venv\Scripts\activate     # Windows
-
-# Установка зависимостей
-pip install -r requirements.txt
+# Автоматическое создание виртуального окружения и установка зависимостей
+uv sync
 
 # Установка браузеров Playwright (новое в v1.10.1)
-playwright install chromium
+uv run playwright install chromium
 
 # Новые зависимости для веб-экстракции:
 # v1.10.0: requests, beautifulsoup4, lxml, urllib3
 # v1.10.1: playwright - для JS-рендеринга и lazy loading
 
 # Запуск сервера разработки
-uvicorn app.main:app --reload --host 0.0.0.0 --port 7555
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 7555
 ```
 
 ### Структура проекта

@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-import threading
 import time
 import xml.etree.ElementTree as ET
 import zipfile
@@ -30,9 +29,7 @@ except ImportError:
 # Импорты для различных форматов
 try:
     import pdfplumber
-    import PyPDF2
 except ImportError:
-    PyPDF2 = None
     pdfplumber = None
 
 try:
@@ -106,8 +103,8 @@ except ImportError:
 
 from fastapi import BackgroundTasks
 
-from app.config import settings
-from app.utils import get_file_extension, is_archive_format, is_supported_format
+from .config import settings
+from .utils import get_file_extension, is_archive_format, is_supported_format, managed_temp_file
 
 logger = logging.getLogger(__name__)
 
@@ -231,25 +228,19 @@ class TextExtractor:
             raise ImportError("pdfplumber не установлен")
 
         text_parts = []
-        temp_file_path = None
 
         try:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
+            with managed_temp_file(suffix=".pdf", content=content) as temp_file_path:
+                with pdfplumber.open(temp_file_path) as pdf:
+                    for page_num, page in enumerate(pdf.pages, 1):
+                        page_texts = self._extract_pdf_page_content(page, page_num)
+                        text_parts.extend(page_texts)
 
-            with pdfplumber.open(temp_file_path) as pdf:
-                for page_num, page in enumerate(pdf.pages, 1):
-                    page_texts = self._extract_pdf_page_content(page, page_num)
-                    text_parts.extend(page_texts)
-
-            return "\n\n".join(text_parts)
+                return "\n\n".join(text_parts)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке PDF: {str(e)}")
             raise ValueError(f"Error processing PDF: {str(e)}")
-        finally:
-            self._cleanup_temp_file(temp_file_path)
 
     def _extract_pdf_page_content(self, page, page_num: int) -> list:
         """Извлечение содержимого страницы PDF."""
@@ -1081,35 +1072,22 @@ class TextExtractor:
         if not load:
             raise ImportError("odfpy не установлен")
 
-        temp_file_path = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=".odt", delete=False) as temp_file:
-                temp_file.write(content)
-                temp_file_path = temp_file.name
+            with managed_temp_file(suffix=".odt", content=content) as temp_file_path:
+                doc = load(temp_file_path)
+                text_parts = []
 
-            doc = load(temp_file_path)
-            text_parts = []
+                # Извлечение всех текстовых элементов
+                for p in doc.getElementsByType(P):
+                    text = extractText(p)
+                    if text.strip():
+                        text_parts.append(text)
 
-            # Извлечение всех текстовых элементов
-            for p in doc.getElementsByType(P):
-                text = extractText(p)
-                if text.strip():
-                    text_parts.append(text)
-
-            return "\n".join(text_parts)
+                return "\n".join(text_parts)
 
         except Exception as e:
             logger.error(f"Ошибка при обработке ODT: {str(e)}")
             raise ValueError(f"Error processing ODT: {str(e)}")
-        finally:
-            # Гарантированное удаление временного файла
-            if temp_file_path and os.path.exists(temp_file_path):
-                try:
-                    os.unlink(temp_file_path)
-                except OSError as e:
-                    logger.warning(
-                        f"Не удалось удалить временный файл {temp_file_path}: {str(e)}"
-                    )
 
     def _extract_from_epub_sync(self, content: bytes) -> str:
         """Синхронное извлечение текста из EPUB."""

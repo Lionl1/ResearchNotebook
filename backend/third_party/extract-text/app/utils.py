@@ -5,16 +5,15 @@ import logging
 import os
 import resource
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 import magic
-from werkzeug.utils import secure_filename
 
 from .config import settings
 
@@ -446,102 +445,6 @@ def cleanup_temp_files() -> None:
         logger.error(f"Ошибка при очистке временных файлов: {str(e)}", exc_info=True)
 
 
-def cleanup_recent_temp_files() -> None:
-    """
-    Немедленная очистка временных файлов текущего процесса.
-
-    Удаляет временные файлы, созданные в последние 10 минут
-    """
-    try:
-        # Получаем системную папку для временных файлов
-        temp_dir = tempfile.gettempdir()
-
-        # Паттерны для поиска временных файлов нашего приложения
-        patterns = [
-            "tmp*.pdf",
-            "tmp*.doc",
-            "tmp*.docx",
-            "tmp*.ppt",
-            "tmp*.pptx",
-            "tmp*.odt",
-            "tmp*.xlsx",
-            "tmp*.xls",
-            "tmp*.csv",
-            "tmp*.txt",
-            "tmp*.zip",
-            "tmp*.rar",
-            "tmp*.7z",
-            "tmp*.tar",
-            "tmp*.gz",
-            "tmp*.bz2",
-            "tmp*.xz",
-            "tmp*.html",
-            "tmp*.htm",
-            "tmp*.xml",
-            "tmp*.json",
-            "tmp*.yaml",
-            "tmp*.yml",
-            "tmp*.png",
-            "tmp*.jpg",
-            "tmp*.jpeg",
-            "tmp*.tiff",
-            "tmp*.tif",
-            "tmp*.bmp",
-            "tmp*.gif",
-        ]
-
-        files_removed = 0
-        current_time = time.time()
-
-        # Поиск и удаление недавних временных файлов (младше 10 минут)
-        for pattern in patterns:
-            full_pattern = os.path.join(temp_dir, pattern)
-            for temp_file in glob.glob(full_pattern):
-                try:
-                    # Проверяем, что файл младше 10 минут (600 секунд)
-                    file_age = os.path.getmtime(temp_file)
-
-                    if current_time - file_age <= 600:  # 10 минут
-                        os.unlink(temp_file)
-                        files_removed += 1
-                        logger.debug(f"Удален недавний временный файл: {temp_file}")
-                except OSError as e:
-                    logger.debug(
-                        f"Не удалось удалить временный файл {temp_file}: {str(e)}"
-                    )
-
-        # Поиск и удаление недавних временных папок
-        temp_dirs_patterns = ["tmp*", "extract_*", "temp_*"]
-        dirs_removed = 0
-
-        for pattern in temp_dirs_patterns:
-            full_pattern = os.path.join(temp_dir, pattern)
-            for temp_dir_path in glob.glob(full_pattern):
-                if os.path.isdir(temp_dir_path):
-                    try:
-                        # Проверяем, что папка младше 10 минут
-                        dir_age = os.path.getmtime(temp_dir_path)
-
-                        if current_time - dir_age <= 600:  # 10 минут
-                            shutil.rmtree(temp_dir_path, ignore_errors=True)
-                            dirs_removed += 1
-                            logger.debug(
-                                f"Удалена недавняя временная папка: {temp_dir_path}"
-                            )
-                    except OSError as e:
-                        logger.debug(
-                            f"Не удалось удалить временную папку {temp_dir_path}: {str(e)}"
-                        )
-
-        if files_removed > 0 or dirs_removed > 0:
-            logger.info(
-                f"Очистка недавних временных файлов завершена. Удалено файлов: {files_removed}, папок: {dirs_removed}"
-            )
-
-    except Exception as e:
-        logger.warning(f"Ошибка при очистке недавних временных файлов: {str(e)}")
-
-
 def run_subprocess_with_limits(
     command: list,
     timeout: int = 30,
@@ -579,33 +482,22 @@ def run_subprocess_with_limits(
     if memory_limit is None:
         memory_limit = settings.MAX_SUBPROCESS_MEMORY
 
-    def preexec_fn():
-        """Функция для установки ограничений ресурсов перед выполнением."""
-        try:
-            # Устанавливаем ограничение на использование виртуальной памяти
-            resource.setrlimit(resource.RLIMIT_AS, (memory_limit, memory_limit))
+    memory_limit_kb = memory_limit // 1024
+    cpu_timeout = timeout * 2
 
-            # Устанавливаем ограничение на размер данных
-            resource.setrlimit(resource.RLIMIT_DATA, (memory_limit, memory_limit))
-
-            # Устанавливаем ограничение на время CPU (в секундах)
-            resource.setrlimit(resource.RLIMIT_CPU, (timeout * 2, timeout * 2))
-
-            logger.debug(
-                f"Установлены ограничения ресурсов: память={memory_limit}, CPU={timeout * 2}"
-            )
-
-        except Exception as e:
-            logger.warning(f"Не удалось установить ограничения ресурсов: {e}")
+    safe_command = [
+        "sh", "-c",
+        f"ulimit -v {memory_limit_kb} -d {memory_limit_kb} -t {cpu_timeout}; exec \"$@\"",
+        "--"
+    ] + command
 
     try:
         # Запускаем процесс с ограничениями
         result = subprocess.run(
-            command,
+            safe_command,
             timeout=timeout,
             capture_output=capture_output,
             text=text,
-            preexec_fn=preexec_fn,
             **kwargs,
         )
 
@@ -828,3 +720,28 @@ def extract_mime_from_base64_data_uri(data_uri: str) -> Optional[str]:
     except Exception as e:
         logger.warning(f"Ошибка извлечения MIME-типа из data URI: {str(e)}")
         return None
+
+
+@contextmanager
+def managed_temp_file(suffix: str = "", content: bytes = None):
+    """
+    Контекстный менеджер для безопасного создания и автоматического удаления временных файлов.
+    """
+    fd, temp_path = tempfile.mkstemp(suffix=suffix)
+    try:
+        if content is not None:
+            with os.fdopen(fd, 'wb') as f:
+                f.write(content)
+        else:
+            os.close(fd)
+        
+        yield temp_path
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+                logger.debug(f"Временный файл удален: {temp_path}")
+            except OSError as e:
+                logger.warning(
+                    f"Не удалось удалить временный файл {temp_path}: {e}"
+                )

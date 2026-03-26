@@ -9,20 +9,22 @@ import base64
 import logging
 import os
 import time
+import uuid
+import json
+import tempfile
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from app.config import settings
-from app.extractors import TextExtractor
-from app.utils import (
-    cleanup_recent_temp_files,
+from .config import settings
+from .extractors import TextExtractor
+from .utils import (
     cleanup_temp_files,
     sanitize_filename,
     setup_logging,
@@ -212,119 +214,61 @@ async def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/v1/supported-formats")
-async def supported_formats() -> Dict[str, list]:
-    """Поддерживаемые форматы файлов."""
-    return settings.SUPPORTED_FORMATS
+async def _process_extraction(content: bytes, original_filename: str) -> Dict[str, Any] | JSONResponse:
+    """Общая логика извлечения текста для файлов и base64."""
+    safe_filename_for_processing = sanitize_filename(original_filename)
 
+    # Проверка размера файла
+    file_size = len(content)
+    if file_size > settings.MAX_FILE_SIZE:
+        logger.warning(
+            f"Файл {original_filename} слишком большой: {file_size} bytes"
+        )
+        raise HTTPException(
+            status_code=413, detail="File size exceeds maximum allowed size"
+        )
 
-@app.post("/v1/extract/file")
-async def extract_text(file: UploadFile = FILE_UPLOAD):
-    """Извлечение текста из файла."""
+    # Проверка на пустой файл
+    if not content:
+        logger.warning(f"Файл {original_filename} пуст")
+        raise HTTPException(status_code=422, detail="File is empty")
+
+    # Проверка соответствия расширения файла его содержимому
+    is_valid, validation_error = validate_file_type(content, original_filename)
+    if not is_valid:
+        logger.warning(
+            f"Файл {original_filename} не прошел проверку типа: {validation_error}"
+        )
+        return JSONResponse(
+            status_code=415,
+            content={
+                "status": "error",
+                "filename": original_filename,
+                "message": "Расширение файла не соответствует его содержимому. Возможная подделка типа файла.",
+            },
+        )
+
+    # Извлечение текста - выполняем в пуле потоков с таймаутом
+    start_time = time.time()
     try:
-        # Санитизация имени файла
-        original_filename = file.filename or "unknown_file"
-        safe_filename_for_processing = sanitize_filename(original_filename)
-
-        logger.info(f"Получен файл для обработки: {original_filename}")
-
-        # Проверка наличия размера файла (защита от DoS)
-        if file.size is None:
-            logger.warning(
-                f"Файл {original_filename} не содержит заголовок Content-Length"
-            )
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
-                },
-            )
-
-        # Проверка размера файла
-        if file.size > settings.MAX_FILE_SIZE:
-            logger.warning(
-                f"Файл {original_filename} слишком большой: {file.size} bytes"
-            )
-            raise HTTPException(
-                status_code=413, detail="File size exceeds maximum allowed size"
-            )
-
-        # Чтение содержимого файла
-        content = await file.read()
-
-        # Проверка на пустой файл
-        if not content:
-            logger.warning(f"Файл {original_filename} пуст")
-            raise HTTPException(status_code=422, detail="File is empty")
-
-        # Проверка соответствия расширения файла его содержимому
-        is_valid, validation_error = validate_file_type(content, original_filename)
-        if not is_valid:
-            logger.warning(
-                f"Файл {original_filename} не прошел проверку типа: {validation_error}"
-            )
-            return JSONResponse(
-                status_code=415,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Расширение файла не соответствует его содержимому. Возможная подделка типа файла.",
-                },
-            )
-
-        # Извлечение текста - КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: выполняем в пуле потоков с таймаутом
-        start_time = time.time()
-        try:
-            extracted_files = await asyncio.wait_for(
-                run_in_threadpool(
-                    text_extractor.extract_text, content, safe_filename_for_processing
-                ),
-                timeout=settings.PROCESSING_TIMEOUT_SECONDS,  # 300 секунд согласно ТЗ п.5.1
-            )
-        except asyncio.TimeoutError:
-            logger.error(
-                f"Таймаут обработки файла {original_filename}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд"
-            )
-            return JSONResponse(
-                status_code=504,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
-                },
-            )
-        finally:
-            # Дополнительная очистка временных файлов после обработки
-            try:
-                cleanup_recent_temp_files()
-            except Exception as cleanup_error:
-                logger.warning(
-                    f"Ошибка при очистке временных файлов: {str(cleanup_error)}"
-                )
-
-        process_time = time.time() - start_time
-
-        # Подсчет общей длины текста
-        total_text_length = sum(
-            len(file_data.get("text", "")) for file_data in extracted_files
+        extracted_files = await asyncio.wait_for(
+            run_in_threadpool(
+                text_extractor.extract_text, content, safe_filename_for_processing
+            ),
+            timeout=settings.PROCESSING_TIMEOUT_SECONDS,
         )
-
-        logger.info(
-            f"Текст успешно извлечен из {original_filename} за {process_time:.3f}s. "
-            f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
+    except asyncio.TimeoutError:
+        logger.error(
+            f"Таймаут обработки файла {original_filename}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд"
         )
-
-        return {
-            "status": "success",
-            "filename": original_filename,
-            "count": len(extracted_files),
-            "files": extracted_files,
-        }
-
-    except HTTPException:
-        raise
+        return JSONResponse(
+            status_code=504,
+            content={
+                "status": "error",
+                "filename": original_filename,
+                "message": f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
+            },
+        )
     except ValueError as e:
         error_msg = str(e)
         if "Unsupported file format" in error_msg:
@@ -351,6 +295,69 @@ async def extract_text(file: UploadFile = FILE_UPLOAD):
                 },
             )
     except Exception as e:
+        logger.error(
+            f"Ошибка при обработке файла {original_filename}: {str(e)}", exc_info=True
+        )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "status": "error",
+                "filename": original_filename,
+                "message": "Файл поврежден или формат не поддерживается.",
+            },
+        )
+
+    process_time = time.time() - start_time
+    total_text_length = sum(len(f.get("text", "")) for f in extracted_files)
+
+    logger.info(
+        f"Текст успешно извлечен из {original_filename} за {process_time:.3f}s. "
+        f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
+    )
+
+    return {
+        "status": "success",
+        "filename": original_filename,
+        "count": len(extracted_files),
+        "files": extracted_files,
+    }
+
+@app.get("/v1/supported-formats")
+async def supported_formats() -> Dict[str, list]:
+    """Поддерживаемые форматы файлов."""
+    return settings.SUPPORTED_FORMATS
+
+
+@app.post("/v1/extract/file")
+async def extract_text(file: UploadFile = FILE_UPLOAD):
+    """Извлечение текста из файла."""
+    try:
+        original_filename = file.filename or "unknown_file"
+        logger.info(f"Получен файл для обработки: {original_filename}")
+
+        # Проверка наличия размера файла (защита от DoS)
+        if file.size is None:
+            logger.warning(
+                f"Файл {original_filename} не содержит заголовок Content-Length"
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "filename": original_filename,
+                    "message": "Отсутствует заголовок Content-Length. Пожалуйста, убедитесь, что размер файла указан в запросе.",
+                },
+            )
+
+        # Чтение содержимого файла
+        content = await file.read()
+        
+        # Единая обработка файла
+        return await _process_extraction(content, original_filename)
+
+    except HTTPException:
+        raise
+    except Exception as e:
         # Определяем имя файла для логирования
         filename_for_error = getattr(file, "filename", "unknown_file") or "unknown_file"
         logger.error(
@@ -370,9 +377,7 @@ async def extract_text(file: UploadFile = FILE_UPLOAD):
 async def extract_text_base64(request: Base64FileRequest):
     """Извлечение текста из base64-файла."""
     try:
-        # Санитизация имени файла
         original_filename = request.filename
-        safe_filename_for_processing = sanitize_filename(original_filename)
 
         logger.info(f"Получен base64-файл для обработки: {original_filename}")
 
@@ -392,112 +397,11 @@ async def extract_text_base64(request: Base64FileRequest):
                 },
             )
 
-        # Проверка размера файла
-        file_size = len(content)
-        if file_size > settings.MAX_FILE_SIZE:
-            logger.warning(
-                f"Файл {original_filename} слишком большой: {file_size} bytes"
-            )
-            raise HTTPException(
-                status_code=413, detail="File size exceeds maximum allowed size"
-            )
-
-        # Проверка на пустой файл
-        if not content:
-            logger.warning(f"Файл {original_filename} пуст")
-            raise HTTPException(status_code=422, detail="File is empty")
-
-        # Проверка соответствия расширения файла его содержимому
-        is_valid, validation_error = validate_file_type(content, original_filename)
-        if not is_valid:
-            logger.warning(
-                f"Файл {original_filename} не прошел проверку типа: {validation_error}"
-            )
-            return JSONResponse(
-                status_code=415,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Расширение файла не соответствует его содержимому. Возможная подделка типа файла.",
-                },
-            )
-
-        # Извлечение текста - выполняем в пуле потоков с таймаутом
-        start_time = time.time()
-        try:
-            extracted_files = await asyncio.wait_for(
-                run_in_threadpool(
-                    text_extractor.extract_text, content, safe_filename_for_processing
-                ),
-                timeout=settings.PROCESSING_TIMEOUT_SECONDS,  # 300 секунд согласно ТЗ п.5.1
-            )
-        except asyncio.TimeoutError:
-            logger.error(
-                f"Таймаут обработки файла {original_filename}: превышен лимит {settings.PROCESSING_TIMEOUT_SECONDS} секунд"
-            )
-            return JSONResponse(
-                status_code=504,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": f"Обработка файла превысила установленный лимит времени ({settings.PROCESSING_TIMEOUT_SECONDS} секунд).",
-                },
-            )
-        finally:
-            # Дополнительная очистка временных файлов после обработки base64-файла
-            try:
-                cleanup_recent_temp_files()
-            except Exception as cleanup_error:
-                logger.warning(
-                    f"Ошибка при очистке временных файлов: {str(cleanup_error)}"
-                )
-
-        process_time = time.time() - start_time
-
-        # Подсчет общей длины текста
-        total_text_length = sum(
-            len(file_data.get("text", "")) for file_data in extracted_files
-        )
-
-        logger.info(
-            f"Текст успешно извлечен из base64-файла {original_filename} за {process_time:.3f}s. "
-            f"Обработано файлов: {len(extracted_files)}, общая длина текста: {total_text_length} символов"
-        )
-
-        return {
-            "status": "success",
-            "filename": original_filename,
-            "count": len(extracted_files),
-            "files": extracted_files,
-        }
+        # Единая обработка файла
+        return await _process_extraction(content, original_filename)
 
     except HTTPException:
         raise
-    except ValueError as e:
-        error_msg = str(e)
-        if "Unsupported file format" in error_msg:
-            logger.warning(f"Неподдерживаемый формат файла: {original_filename}")
-            return JSONResponse(
-                status_code=415,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Неподдерживаемый формат файла.",
-                },
-            )
-        else:
-            logger.error(
-                f"Ошибка при обработке файла {original_filename}: {error_msg}",
-                exc_info=True,
-            )
-            return JSONResponse(
-                status_code=422,
-                content={
-                    "status": "error",
-                    "filename": original_filename,
-                    "message": "Файл поврежден или формат не поддерживается.",
-                },
-            )
     except Exception as e:
         logger.error(
             f"Ошибка при обработке base64-файла {original_filename}: {str(e)}",
@@ -638,6 +542,94 @@ async def extract_text_from_url(request: URLRequest):
             },
         )
 
+
+def _save_job_status(job_id: str, status: str, data: dict = None, error: str = None):
+    """Сохранение статуса асинхронной задачи на диск."""
+    job_data = {"job_id": job_id, "status": status, "updated_at": time.time()}
+    if data:
+        job_data["data"] = data
+    if error:
+        job_data["error"] = error
+        
+    filepath = os.path.join(tempfile.gettempdir(), f"extract_job_{job_id}.json")
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(job_data, f, ensure_ascii=False)
+
+
+async def _background_extraction_task(job_id: str, content: bytes, original_filename: str):
+    """Фоновая задача для обработки тяжелых файлов (например, книг)."""
+    try:
+        await run_in_threadpool(_save_job_status, job_id, "processing")
+        safe_filename_for_processing = sanitize_filename(original_filename)
+        
+        # Для больших книг увеличиваем таймаут в 2 раза
+        bg_timeout = settings.PROCESSING_TIMEOUT_SECONDS * 2
+        
+        start_time = time.time()
+        extracted_files = await asyncio.wait_for(
+            run_in_threadpool(
+                text_extractor.extract_text, content, safe_filename_for_processing
+            ),
+            timeout=bg_timeout,
+        )
+        process_time = time.time() - start_time
+        
+        result_data = {
+            "filename": original_filename,
+            "count": len(extracted_files),
+            "files": extracted_files,
+            "process_time_seconds": round(process_time, 2)
+        }
+        
+        await run_in_threadpool(_save_job_status, job_id, "completed", data=result_data)
+        
+    except asyncio.TimeoutError:
+        await run_in_threadpool(_save_job_status, job_id, "failed", error="Превышен лимит времени фоновой обработки")
+    except Exception as e:
+        await run_in_threadpool(_save_job_status, job_id, "failed", error=str(e))
+
+
+@app.post("/v1/extract/async/file")
+async def extract_text_async(background_tasks: BackgroundTasks, file: UploadFile = FILE_UPLOAD):
+    """
+    Асинхронное извлечение текста.
+    Рекомендуется для батчевой обработки больших файлов (книги PDF, EPUB, тяжелые архивы), 
+    чтобы избежать HTTP-таймаутов.
+    """
+    original_filename = file.filename or "unknown_file"
+    logger.info(f"Получен файл для фоновой обработки: {original_filename}")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=422, detail="File is empty")
+        
+    is_valid, validation_error = validate_file_type(content, original_filename)
+    if not is_valid:
+        return JSONResponse(status_code=415, content={"status": "error", "message": validation_error})
+
+    job_id = str(uuid.uuid4())
+    await run_in_threadpool(_save_job_status, job_id, "pending")
+    
+    background_tasks.add_task(_background_extraction_task, job_id, content, original_filename)
+    
+    return {
+        "status": "success", 
+        "job_id": job_id, 
+        "message": "Файл принят в фоновую обработку. Используйте GET /v1/extract/async/{job_id} для получения результата."
+    }
+
+
+@app.get("/v1/extract/async/{job_id}")
+async def get_async_job_status(job_id: str):
+    """Получение результата асинхронной обработки."""
+    filepath = os.path.join(tempfile.gettempdir(), f"extract_job_{job_id}.json")
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Job not found or expired")
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading job: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(

@@ -1,0 +1,52 @@
+[project]
+name = "hyperbooklm"
+version = "0.1.0"
+description = "Local research assistant built on FastAPI with embeddings-based search and STT"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # --- Основные зависимости Backend (HyperbookLM) ---
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+    "httpx",
+    "pydantic",
+    "chromadb",
+    "sentence-transformers",
+    "langchain",
+    "langchain-text-splitters",
+    "pymupdf",
+    "faster-whisper",
+    
+    # --- Зависимости Extract-Text (third_party) ---
+    "pdfplumber",
+    "python-docx",
+    "python-pptx",
+    "striprtf",
+    "pandas",
+    "openpyxl",
+    "xlrd",
+    "Pillow",
+    "pytesseract",
+    "beautifulsoup4",
+    "lxml",
+    "markdown",
+    "requests",
+    "playwright",
+    "PyYAML",
+    "odfpy",
+    "rarfile",
+    "py7zr",
+    "python-dotenv",
+    "python-magic",
+    "extract-msg",
+    "structlog",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-mock",
+]

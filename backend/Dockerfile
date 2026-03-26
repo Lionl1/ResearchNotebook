@@ -21,15 +21,16 @@ RUN apt-get update -o Acquire::Retries=3 && apt-get install -y --no-install-reco
     p7zip-full \
   && rm -rf /var/lib/apt/lists/*
 
-COPY backend/certs/ /usr/local/share/ca-certificates/
-RUN update-ca-certificates
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+# Копируем конфигурацию зависимостей из корня проекта
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --frozen --no-dev
 
-COPY backend/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# Устанавливаем Playwright браузеры и их системные зависимости
+RUN uv run playwright install --with-deps chromium
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 COPY backend /app/backend
 

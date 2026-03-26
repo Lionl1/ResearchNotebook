@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from fastapi.concurrency import run_in_threadpool
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +38,7 @@ if _bootstrap_extract_text():
 
 
 _EXTRACTOR: Optional[Any] = None
+_extractor_lock = threading.Lock()
 
 
 def is_available() -> bool:
@@ -53,8 +56,29 @@ def extract_text_from_file(file_content: bytes, filename: str) -> List[Dict[str,
         raise RuntimeError("extract-text is not available")
     global _EXTRACTOR
     if _EXTRACTOR is None:
-        _EXTRACTOR = _TextExtractor()
+        with _extractor_lock:
+            if _EXTRACTOR is None:
+                _EXTRACTOR = _TextExtractor()
     return _EXTRACTOR.extract_text(file_content, filename)
+
+
+async def extract_text_from_file_async(file_content: bytes, filename: str) -> List[Dict[str, Any]]:
+    """Асинхронная неблокирующая обертка для извлечения текста."""
+    return await run_in_threadpool(extract_text_from_file, file_content, filename)
+
+
+async def extract_text_from_url_async(url: str, user_agent: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Асинхронное извлечение текста с URL с использованием продвинутого парсера (Playwright/JS)."""
+    if not _AVAILABLE or _TextExtractor is None:
+        raise RuntimeError("extract-text is not available")
+    
+    global _EXTRACTOR
+    if _EXTRACTOR is None:
+        with _extractor_lock:
+            if _EXTRACTOR is None:
+                _EXTRACTOR = _TextExtractor()
+                
+    return await run_in_threadpool(_EXTRACTOR.extract_from_url, url, user_agent)
 
 
 def merge_extracted_text(items: List[Dict[str, Any]]) -> str:

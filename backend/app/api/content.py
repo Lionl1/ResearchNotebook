@@ -3,10 +3,11 @@ from typing import Any, Dict
 
 import fitz
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 
 from ..config import DEFAULT_NOTEBOOK_ID, MAX_UPLOAD_SIZE_MB
 from ..extract_text import (
-    extract_text_from_file,
+    extract_text_from_file_async,
     is_available as extract_available,
     is_supported_filename,
     merge_extracted_text,
@@ -18,6 +19,15 @@ from ..stt import transcribe_audio
 
 
 router = APIRouter()
+
+
+def _extract_pdf_sync(data: bytes) -> tuple[str, int]:
+    """Синхронная функция для резервного извлечения текста из PDF."""
+    with fitz.open(stream=data, filetype="pdf") as doc:
+        total_pages = doc.page_count
+        parts = [page.get_text("text") or "" for page in doc]
+        text = "\n".join(parts)
+    return text, total_pages
 
 
 @router.post("/api/scrape")
@@ -79,7 +89,7 @@ async def api_upload(
     total_pages = 1
     if extract_available():
         try:
-            extracted_items = extract_text_from_file(data, filename)
+            extracted_items = await extract_text_from_file_async(data, filename)
             text = merge_extracted_text(extracted_items)
             total_pages = len(extracted_items) if extracted_items else 1
         except Exception as exc:
@@ -87,13 +97,7 @@ async def api_upload(
     elif is_txt:
         text = data.decode("utf-8", errors="replace")
     else:
-        doc = fitz.open(stream=data, filetype="pdf")
-        total_pages = doc.page_count
-        parts = []
-        for page in doc:
-            parts.append(page.get_text("text") or "")
-        text = "\n".join(parts)
-        doc.close()
+        text, total_pages = await run_in_threadpool(_extract_pdf_sync, data)
 
     title = filename.rsplit(".", 1)[0]
     notebook_id = notebookId or DEFAULT_NOTEBOOK_ID
@@ -131,7 +135,7 @@ async def api_stt(
         raise HTTPException(status_code=400, detail=f"File too large (max {MAX_UPLOAD_SIZE_MB}MB)")
 
     try:
-        text, segments = transcribe_audio(data, file.filename or "")
+        text, segments = await run_in_threadpool(transcribe_audio, data, file.filename or "")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

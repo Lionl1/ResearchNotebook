@@ -17,16 +17,27 @@ Includes a lightweight browser UI served by the backend for quick testing.
 ## Quick Start (Local)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r backend/requirements.txt
+uv sync
 cp .env.local.example .env.local
-uvicorn backend.app.main:app --reload --port 8080
+uv run playwright install chromium
+uv run uvicorn backend.app.main:app --reload --port 8080
 ```
 
 Open: `http://localhost:8080`
 
 More details: `backend/README.md`
+
+## Quick Start (Docker Compose)
+
+1. Copy the example environment file and configure it:
+```bash
+cp .env.local.example .env.local
+```
+2. Start the application in the background:
+```bash
+docker compose up -d --build
+```
+3. Open: `http://localhost:8080`
 
 ## Quick Start (Docker)
 
