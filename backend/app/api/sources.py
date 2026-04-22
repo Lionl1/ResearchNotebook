@@ -28,6 +28,7 @@ async def api_sources_remove(payload: RemoveSourceRequest) -> Dict[str, Any]:
     removed = SOURCE_STORE.remove_source(notebook_id, payload.sourceId)
     if not removed:
         raise HTTPException(status_code=404, detail="Source not found")
+    VECTOR_STORE.delete_source(notebook_id, payload.sourceId)
     return {"notebookId": notebook_id, "removed": payload.sourceId}
 
 

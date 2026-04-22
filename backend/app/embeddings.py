@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import List
 
+from fastapi.concurrency import run_in_threadpool
 from sentence_transformers import SentenceTransformer
 
 from .config import EMBEDDINGS_DEVICE, EMBEDDINGS_MODEL
@@ -34,9 +35,9 @@ def _encode(texts: List[str], is_query: bool) -> List[List[float]]:
 
 
 async def embed_texts(texts: List[str]) -> List[List[float]]:
-    return _encode(texts, is_query=False)
+    return await run_in_threadpool(_encode, texts, False)
 
 
 async def embed_query(text: str) -> List[float]:
-    vectors = _encode([text], is_query=True)
+    vectors = await run_in_threadpool(_encode, [text], True)
     return vectors[0] if vectors else []

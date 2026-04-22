@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from typing import Any, Dict, List, Tuple
 
 import chromadb
 
 from .config import CHROMA_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_collection_name(name: str) -> str:
@@ -55,18 +58,59 @@ class ChromaVectorStore:
             name=name, metadata={"hnsw:space": "cosine"}
         )
 
-    def replace(self, notebook_id: str, embeddings: List[List[float]], metas: List[Dict[str, Any]]) -> None:
-        name = self._collection_name(notebook_id)
+    def _delete_by_source_ids(self, collection, source_ids: List[str]) -> None:
+        for source_id in source_ids:
+            if not source_id:
+                continue
+            try:
+                collection.delete(where={"source_id": source_id})
+            except Exception as exc:
+                logger.warning("Failed to delete vectors for source %s: %s", source_id, exc)
+
+    def _existing_source_ids(self, notebook_id: str) -> List[str]:
         try:
-            self._client.delete_collection(name)
+            collection = self._client.get_collection(self._collection_name(notebook_id))
         except Exception:
-            pass
+            return []
+        result = collection.get(include=["metadatas"])
+        metadatas = _normalize_json(result.get("metadatas")) or []
+        source_ids = {
+            (meta or {}).get("source_id")
+            for meta in metadatas
+            if isinstance(meta, dict) and (meta or {}).get("source_id")
+        }
+        return sorted(source_ids)
+
+    def upsert(
+        self,
+        notebook_id: str,
+        embeddings: List[List[float]],
+        metas: List[Dict[str, Any]],
+        prune_missing: bool = False,
+    ) -> None:
+        collection = self._get_collection(notebook_id)
+        source_ids = sorted(
+            {
+                str(meta.get("source_id"))
+                for meta in metas
+                if meta.get("source_id")
+            }
+        )
+        if prune_missing:
+            existing_ids = set(self._existing_source_ids(notebook_id))
+            obsolete_ids = sorted(existing_ids - set(source_ids))
+            self._delete_by_source_ids(collection, obsolete_ids)
+        self._delete_by_source_ids(collection, source_ids)
 
         if not embeddings:
             return
 
-        collection = self._get_collection(notebook_id)
-        ids = [f"{name}_{idx}" for idx in range(len(embeddings))]
+        name = self._collection_name(notebook_id)
+        ids = []
+        for idx, meta in enumerate(metas):
+            source_id = meta.get("source_id") or "source"
+            chunk_index = meta.get("chunk_index", idx)
+            ids.append(f"{name}_{source_id}_{chunk_index}")
         documents = [meta.get("text", "") for meta in metas]
         metadatas = []
         for meta in metas:
@@ -79,6 +123,15 @@ class ChromaVectorStore:
             documents=documents,
             metadatas=metadatas,
         )
+        logger.info(
+            "Upserted %d vectors for notebook %s across %d sources",
+            len(embeddings),
+            notebook_id,
+            len(source_ids),
+        )
+
+    def replace(self, notebook_id: str, embeddings: List[List[float]], metas: List[Dict[str, Any]]) -> None:
+        self.upsert(notebook_id, embeddings, metas, prune_missing=True)
 
     def export(self, notebook_id: str) -> Dict[str, Any] | None:
         try:
@@ -163,6 +216,15 @@ class ChromaVectorStore:
             self._client.delete_collection(name)
         except Exception:
             return
+
+    def delete_source(self, notebook_id: str, source_id: str) -> None:
+        if not source_id:
+            return
+        try:
+            collection = self._client.get_collection(self._collection_name(notebook_id))
+        except Exception:
+            return
+        self._delete_by_source_ids(collection, [source_id])
 
 
 VECTOR_STORE = ChromaVectorStore(CHROMA_DIR)

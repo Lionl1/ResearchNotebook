@@ -5,20 +5,23 @@ description = "Local research assistant built on FastAPI with embeddings-based s
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    # --- Основные зависимости Backend (HyperbookLM) ---
     "fastapi",
     "uvicorn[standard]",
     "python-multipart",
     "httpx",
     "pydantic",
+    "python-dotenv",
     "chromadb",
     "sentence-transformers",
-    "langchain",
     "langchain-text-splitters",
     "pymupdf",
+]
+
+[project.optional-dependencies]
+stt = [
     "faster-whisper",
-    
-    # --- Зависимости Extract-Text (third_party) ---
+]
+ocr = [
     "pdfplumber",
     "python-docx",
     "python-pptx",
@@ -28,18 +31,19 @@ dependencies = [
     "xlrd",
     "Pillow",
     "pytesseract",
+    "odfpy",
+    "rarfile",
+    "py7zr",
+    "python-magic",
+    "extract-msg",
+]
+web = [
     "beautifulsoup4",
     "lxml",
     "markdown",
     "requests",
     "playwright",
     "PyYAML",
-    "odfpy",
-    "rarfile",
-    "py7zr",
-    "python-dotenv",
-    "python-magic",
-    "extract-msg",
     "structlog",
 ]
 

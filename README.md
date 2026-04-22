@@ -17,7 +17,7 @@ Includes a lightweight browser UI served by the backend for quick testing.
 ## Quick Start (Local)
 
 ```bash
-uv sync
+uv sync --extra stt --extra ocr --extra web
 cp .env.local.example .env.local
 uv run playwright install chromium
 uv run uvicorn backend.app.main:app --reload --port 8080
@@ -49,6 +49,18 @@ docker build -t hyperbooklm-backend -f backend/Dockerfile .
 Run:
 ```bash
 docker run --env-file .env.local -p 8080:8000 hyperbooklm-backend
+```
+
+Optional build args:
+
+```bash
+docker build \
+  -t hyperbooklm-backend \
+  -f backend/Dockerfile \
+  --build-arg UV_EXTRAS="stt ocr web" \
+  --build-arg INSTALL_OCR=true \
+  --build-arg INSTALL_PLAYWRIGHT=true \
+  .
 ```
 
 If the LLM server runs on the host, set:
@@ -87,7 +99,9 @@ Optional:
 - `CORS_ORIGINS`
 - `CHUNK_SIZE`, `CHUNK_OVERLAP`, `MAX_SOURCE_CHARS`, `SEARCH_TOP_K`
 - `CHROMA_DIR` (default: `.chroma`, ChromaDB storage)
+- `STATE_FILE` (default: `<CHROMA_DIR>/app_state.json`, persisted project/source metadata)
 - `MAX_IMPORT_SIZE_MB`, `MAX_IMPORT_UNPACK_MB`, `MAX_IMPORT_FILES` (import limits)
+- `CHAT_CONTEXT_CHAR_BUDGET` (default: `12000`, retrieved context budget for chat)
 - `GEMINI_API_KEY`, `VEO_MODEL` for `/api/veo/*`
 
 ## Project Structure
@@ -114,7 +128,6 @@ hyperbooklm/
 │   │   │   └── app.js
 │   ├── third_party/
 │   │   └── extract-text/
-│   └── requirements.txt
 ├── .env.local.example
 └── README.md
 ```

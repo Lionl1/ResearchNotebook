@@ -3,7 +3,7 @@ from typing import Dict
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..config import DEFAULT_NOTEBOOK_ID, SEARCH_TOP_K
+from ..config import CHAT_CONTEXT_CHAR_BUDGET, DEFAULT_NOTEBOOK_ID, SEARCH_TOP_K
 from ..embeddings import embed_query
 from ..llm import chat_completion_text, stream_chat_completion
 from ..models import ChatRequest, SummaryRequest
@@ -12,6 +12,32 @@ from .llm_options import resolve_llm_options
 
 
 router = APIRouter()
+
+
+def _fit_context_budget(results, budget: int) -> str:
+    if budget <= 0:
+        return ""
+
+    blocks = []
+    used = 0
+    for idx, (_score, meta) in enumerate(results, start=1):
+        title = meta.get("source_title") or meta.get("source_url") or "Source"
+        text = (meta.get("text") or "").strip()
+        if not text:
+            continue
+        block = f"[Source {idx}] {title}\n{text}"
+        remaining = budget - used
+        if remaining <= 0:
+            break
+        if len(block) > remaining:
+            if remaining < 64:
+                break
+            block = block[: max(0, remaining - 3)].rstrip() + "..."
+        blocks.append(block)
+        used += len(block) + 2
+        if used >= budget:
+            break
+    return "\n\n".join(blocks)
 
 
 @router.post("/api/summary")
@@ -64,12 +90,10 @@ async def api_chat(payload: ChatRequest) -> StreamingResponse:
                 top_k = payload.topK or SEARCH_TOP_K
                 results = VECTOR_STORE.search(notebook_id, query_embedding, top_k)
                 if results:
-                    blocks = []
-                    for idx, (score, meta) in enumerate(results, start=1):
-                        title = meta.get("source_title") or meta.get("source_url") or "Source"
-                        text = meta.get("text", "")
-                        blocks.append(f"[Source {idx}] {title}\n{text}")
-                    retrieved_context = "\n\n".join(blocks)
+                    retrieved_context = _fit_context_budget(
+                        results,
+                        CHAT_CONTEXT_CHAR_BUDGET,
+                    )
             except Exception:
                 retrieved_context = ""
 

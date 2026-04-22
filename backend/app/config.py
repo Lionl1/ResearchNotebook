@@ -69,11 +69,15 @@ CHUNK_OVERLAP = env_int("CHUNK_OVERLAP", 200)
 SEARCH_TOP_K = env_int("SEARCH_TOP_K", 5)
 
 CHROMA_DIR = env("CHROMA_DIR", ".chroma") or ".chroma"
+STATE_FILE = env("STATE_FILE", str(Path(CHROMA_DIR) / "app_state.json")) or str(
+    Path(CHROMA_DIR) / "app_state.json"
+)
 
 MAX_UPLOAD_SIZE_MB = env_int("MAX_UPLOAD_SIZE_MB", 100)
 MAX_IMPORT_SIZE_MB = env_int("MAX_IMPORT_SIZE_MB", 200)
 MAX_IMPORT_UNPACK_MB = env_int("MAX_IMPORT_UNPACK_MB", 600)
 MAX_IMPORT_FILES = env_int("MAX_IMPORT_FILES", 4000)
+CHAT_CONTEXT_CHAR_BUDGET = env_int("CHAT_CONTEXT_CHAR_BUDGET", 12000)
 
 STT_PROVIDER = env("STT_PROVIDER", "faster-whisper") or "faster-whisper"
 STT_MODEL = env("STT_MODEL", "") or ""

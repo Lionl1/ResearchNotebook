@@ -41,7 +41,12 @@ async def api_index(payload: NotebookRequest) -> Dict[str, Any]:
     if len(embeddings) != len(chunks):
         raise HTTPException(status_code=500, detail="Embeddings count mismatch")
 
-    VECTOR_STORE.replace(payload.notebookId, embeddings, chunks)
+    VECTOR_STORE.upsert(
+        payload.notebookId,
+        embeddings,
+        chunks,
+        prune_missing=not payload.sources,
+    )
     SOURCE_STORE.set_sources(payload.notebookId, sources)
     dimension = len(embeddings[0]) if embeddings else 0
     return {

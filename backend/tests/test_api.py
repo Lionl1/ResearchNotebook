@@ -1,4 +1,7 @@
+import io
+import json
 import time
+import zipfile
 
 from backend.app.api import chat as chat_api
 from backend.app.api import indexing as indexing_api
@@ -55,13 +58,14 @@ def test_index_uses_cached_sources(client, monkeypatch):
 
     captured = {}
 
-    def fake_replace(notebook_id, embeddings, chunks):
+    def fake_upsert(notebook_id, embeddings, chunks, prune_missing=False):
         captured["notebook_id"] = notebook_id
         captured["embeddings"] = embeddings
         captured["chunks"] = chunks
+        captured["prune_missing"] = prune_missing
 
     monkeypatch.setattr(indexing_api, "embed_texts", fake_embed_texts)
-    monkeypatch.setattr(indexing_api.VECTOR_STORE, "replace", fake_replace)
+    monkeypatch.setattr(indexing_api.VECTOR_STORE, "upsert", fake_upsert)
 
     response = client.post("/api/index", json={"notebookId": DEFAULT_NOTEBOOK_ID})
     assert response.status_code == 200
@@ -124,10 +128,20 @@ def test_summary_uses_llm(client, monkeypatch):
     assert payload["summary"] == "summary text"
 
 
+def test_chat_context_budgeting():
+    results = [
+        (0.99, {"source_title": "A", "text": "x" * 80}),
+        (0.98, {"source_title": "B", "text": "y" * 80}),
+    ]
+    context = chat_api._fit_context_budget(results, 100)
+    assert len(context) <= 100
+    assert "[Source 1]" in context
+
+
 def test_chat_streaming(client, monkeypatch):
     monkeypatch.setattr(chat_api.VECTOR_STORE, "has", lambda _: False)
 
-    async def fake_stream(_):
+    async def fake_stream(*_, **__):
         yield "Hello "
         yield "world"
 
@@ -143,6 +157,35 @@ def test_chat_streaming(client, monkeypatch):
     )
     assert response.status_code == 200
     assert "Hello world" in response.text
+
+
+def test_projects_import_merge_preserves_existing_sources(client):
+    project = PROJECT_STORE.create("Merge Target")
+    SOURCE_STORE.add_source(project.id, _make_source("source-existing", "before"))
+
+    payload = {
+        "projects": [project.model_dump()],
+        "sources": {
+            project.id: [
+                _make_source("source-existing", "after").model_dump(),
+                _make_source("source-new", "new").model_dump(),
+            ]
+        },
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr("projects.json", json.dumps(payload))
+    buffer.seek(0)
+
+    response = client.post(
+        "/api/projects/import",
+        data={"mode": "merge"},
+        files={"file": ("merge.zip", buffer.getvalue(), "application/zip")},
+    )
+    assert response.status_code == 200
+    merged = SOURCE_STORE.list_sources(project.id)
+    assert {source.id for source in merged} == {"source-existing", "source-new"}
+    assert next(source for source in merged if source.id == "source-existing").text == "after"
 
 
 def test_projects_export_import(client):

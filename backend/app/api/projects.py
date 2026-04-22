@@ -27,6 +27,13 @@ from ..vector_store import VECTOR_STORE
 router = APIRouter()
 
 
+def _merge_sources(existing: List[Source], incoming: List[Source]) -> List[Source]:
+    merged: Dict[str, Source] = {source.id: source for source in existing}
+    for source in incoming:
+        merged[source.id] = source
+    return sorted(merged.values(), key=lambda item: item.addedAt)
+
+
 @router.post("/api/projects")
 async def api_projects() -> Dict[str, Any]:
     projects = PROJECT_STORE.list()
@@ -168,8 +175,10 @@ async def api_projects_import(
                     sources.append(Source(**item))
                 except Exception:
                     continue
-            SOURCE_STORE.set_sources(project_id, sources)
             imported_sources += len(sources)
+            if mode_value == "merge":
+                sources = _merge_sources(SOURCE_STORE.list_sources(project_id), sources)
+            SOURCE_STORE.set_sources(project_id, sources)
 
         if isinstance(vectors_data, dict):
             for project_id, data in vectors_data.items():

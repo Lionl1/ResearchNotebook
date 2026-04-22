@@ -5,6 +5,11 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        UV_EXTRAS: "stt ocr web"
+        INSTALL_OCR: "true"
+        INSTALL_PLAYWRIGHT: "true"
+        INSTALL_STT: "true"
     container_name: hyperbooklm
     ports:
       - "8080:8000"

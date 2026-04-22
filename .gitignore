@@ -10,6 +10,12 @@ backend/certs/*
 __pycache__/
 *.pyc
 .pytest_cache/
+.pytest_state/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 dist/
 build/

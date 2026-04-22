@@ -8,7 +8,7 @@ and vectors are stored in ChromaDB. File parsing is расширен через 
 ## Run
 
 ```bash
-uv sync
+uv sync --extra stt --extra ocr --extra web
 uv run uvicorn backend.app.main:app --reload --port 8080
 ```
 
@@ -44,9 +44,11 @@ Optional:
 - `GEMINI_API_KEY` and `VEO_MODEL` for `/api/veo/*`
 - `CHUNK_SIZE`, `CHUNK_OVERLAP`, `MAX_SOURCE_CHARS`, `SEARCH_TOP_K` for embeddings search
 - `CHROMA_DIR` for Chroma persistence (default: `.chroma`)
+- `STATE_FILE` for project/source metadata persistence (default: `<CHROMA_DIR>/app_state.json`)
 - `DEFAULT_NOTEBOOK_ID` (default: `nb-1`)
 - `OCR_LANGUAGES` for extract-text OCR (set to `none` to disable OCR)
 - `ENABLE_PDF_IMAGE_OCR` to skip OCR for images embedded in PDFs
+- `CHAT_CONTEXT_CHAR_BUDGET` to cap retrieved context size before LLM calls
 
 ## UI Workflow
 
@@ -140,8 +142,8 @@ To reset the index, delete the `CHROMA_DIR` directory.
 ## Notes
 
 - Scraping uses `httpx` + `BeautifulSoup` (static HTML only, no JS execution).
-- `/api/index` replaces the whole index for the notebook.
-- Source cache is in memory; Chroma stores only embeddings + metadata.
+- `/api/index` upserts vectors by `source_id` and prunes stale source vectors when indexing cached notebook sources.
+- Project/source metadata is persisted to disk alongside Chroma state.
 - The embeddings model downloads on first use (Hugging Face cache inside the container).
 - `extract-text` используется для расширенного парсинга файлов. Некоторые функции (OCR,
   архивы, Office) зависят от установленных библиотек и системных утилит.
@@ -151,6 +153,6 @@ To reset the index, delete the `CHROMA_DIR` directory.
 ## Tests
 
 ```bash
-pip install -r backend/requirements.txt -r backend/requirements-test.txt
-pytest backend/tests
+uv sync --extra stt --extra ocr --extra web
+uv run pytest
 ```

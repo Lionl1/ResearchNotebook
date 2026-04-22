@@ -1,20 +1,27 @@
 import os
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple
-
-from faster_whisper import WhisperModel
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from .config import STT_BEAM_SIZE, STT_COMPUTE_TYPE, STT_DEVICE, STT_MODEL, STT_PROVIDER
 
+if TYPE_CHECKING:
+    from faster_whisper import WhisperModel
 
-_MODEL: Optional[WhisperModel] = None
+
+_MODEL: Optional["WhisperModel"] = None
 
 
-def _get_model() -> WhisperModel:
+def _get_model() -> "WhisperModel":
     global _MODEL
     if _MODEL is None:
         if not STT_MODEL:
             raise RuntimeError("STT_MODEL is not configured")
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            raise RuntimeError(
+                "faster-whisper is not installed. Reinstall with the 'stt' extra."
+            ) from exc
         _MODEL = WhisperModel(
             STT_MODEL,
             device=STT_DEVICE,
