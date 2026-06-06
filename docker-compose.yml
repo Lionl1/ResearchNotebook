@@ -19,3 +19,5 @@ services:
     volumes:
       # Сохраняем базу ChromaDB между перезапусками контейнера
       - ./.chroma:/app/.chroma
+      # Сохраняем скачанные модели Hugging Face, чтобы не скачивать их заново
+      - ./.hf_cache:/root/.cache/huggingface

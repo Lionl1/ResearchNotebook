@@ -891,6 +891,13 @@ const handleSlides = async () => {
 };
 
 
+const autoResizeChatInput = () => {
+  const input = el("chat-input");
+  if (!input) return;
+  input.style.height = "auto";
+  input.style.height = (input.scrollHeight + 2) + "px";
+};
+
 const handleChat = async (event) => {
   event.preventDefault();
   const input = el("chat-input");
@@ -900,6 +907,7 @@ const handleChat = async (event) => {
   state.messages.push(message);
   renderChat();
   input.value = "";
+  autoResizeChatInput();
 
   const useSources = chatUseSourcesToggle ? chatUseSourcesToggle.checked : true;
   const context = useSources ? buildContext() : "";
@@ -1228,6 +1236,7 @@ el("mindmap-btn").addEventListener("click", handleMindmap);
 el("slides-btn").addEventListener("click", handleSlides);
 el("chat-form").addEventListener("submit", handleChat);
 el("chat-input").addEventListener("keydown", handleChatKeydown);
+el("chat-input").addEventListener("input", autoResizeChatInput);
 el("clear-btn").addEventListener("click", handleClear);
 document.querySelectorAll("[data-copy]").forEach((button) => {
   button.addEventListener("click", () => handleCopy(button.dataset.copy, button));

@@ -10,6 +10,41 @@
   --accent: #111111;
   --accent-dark: #000000;
   --chip: #f1ede6;
+
+  /* Theme mappings */
+  --panel-bg: var(--panel);
+  --input-bg: #ffffff;
+  --chat-bg: #fcfbf8;
+  --message-assistant-bg: #f4f1ec;
+  --code-bg: #efeae0;
+  --project-card-bg: #f7efe1;
+  --settings-card-bg: #f6f1e7;
+  --output-bg: #f8f6f2;
+  --slide-card-bg: #f8f5ef;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141412;
+    --bg-deep: #1c1c1a;
+    --ink: #e6e3da;
+    --muted: #a6a195;
+    --panel: #1a1a18;
+    --border: #42403b;
+    --accent: #e6e3da;
+    --accent-dark: #ffffff;
+    --chip: #242321;
+
+    --panel-bg: var(--panel);
+    --input-bg: #1c1c1a;
+    --chat-bg: #181816;
+    --message-assistant-bg: #242321;
+    --code-bg: #2d2b27;
+    --project-card-bg: #24211c;
+    --settings-card-bg: #22201b;
+    --output-bg: #1c1b18;
+    --slide-card-bg: #22201b;
+  }
 }
 
 * {
@@ -70,7 +105,7 @@ h1 {
   display: grid;
   gap: 10px;
   padding: 12px;
-  background: #f7efe1;
+  background: var(--project-card-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
   margin-bottom: 12px;
@@ -92,7 +127,7 @@ h1 {
 
 .project-row select,
 .project-row input {
-  background: #fff;
+  background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 7px 9px;
@@ -105,7 +140,7 @@ h1 {
 }
 
 .project-card .ghost {
-  background: #fff;
+  background: var(--input-bg);
   color: var(--accent-dark);
   border: 1px solid var(--border);
 }
@@ -163,7 +198,7 @@ h1 {
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: #fff7eb;
+  background: var(--chip);
 }
 
 .toggle input {
@@ -212,7 +247,7 @@ h1 {
   display: grid;
   gap: 10px;
   padding: 12px;
-  background: #f6f1e7;
+  background: var(--settings-card-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
   margin-bottom: 12px;
@@ -272,7 +307,7 @@ button {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--input-bg);
   color: var(--ink);
   font-family: inherit;
   font-size: 13px;
@@ -282,7 +317,7 @@ select {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: #fff;
+  background: var(--input-bg);
   color: var(--ink);
   font-family: inherit;
   font-size: 13px;
@@ -312,7 +347,7 @@ button:hover {
 }
 
 button.secondary {
-  background: #f0ede7;
+  background: var(--chip);
   color: var(--ink);
   border: 1px solid var(--border);
 }
@@ -348,7 +383,7 @@ button:disabled {
 .progress {
   width: 160px;
   height: 6px;
-  background: #f1e7d6;
+  background: var(--bg-deep);
   border-radius: 999px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -372,7 +407,7 @@ button:disabled {
 
 .list-item {
   padding: 12px;
-  background: #faf8f4;
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow-wrap: anywhere;
@@ -419,7 +454,7 @@ button:disabled {
   flex-direction: column;
   gap: 10px;
   padding: 14px;
-  background: #fcfbf8;
+  background: var(--chat-bg);
   border: 1px solid var(--border);
   border-radius: 14px;
   overflow-y: auto;
@@ -478,7 +513,7 @@ button:disabled {
   margin: 8px 0;
   padding: 10px;
   border-radius: 10px;
-  background: #efeae0;
+  background: var(--code-bg);
   font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
     monospace;
   font-size: 12px;
@@ -487,7 +522,7 @@ button:disabled {
 }
 
 .chat-message code {
-  background: #efeae0;
+  background: var(--code-bg);
   border-radius: 6px;
   padding: 1px 4px;
   font-family: "SFMono-Regular", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
@@ -517,7 +552,7 @@ button:disabled {
 }
 
 .chat-message.assistant {
-  background: #f4f1ec;
+  background: var(--message-assistant-bg);
 }
 
 .chat-input {
@@ -542,7 +577,7 @@ button:disabled {
 }
 
 .output-card {
-  background: #fff;
+  background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 12px;
@@ -550,7 +585,7 @@ button:disabled {
 
 .output {
   min-height: 80px;
-  background: #f8f6f2;
+  background: var(--output-bg);
   border-radius: 12px;
   padding: 12px;
   border: 1px solid var(--border);
@@ -613,7 +648,7 @@ button:disabled {
 }
 
 .slide-card {
-  background: #f8f5ef;
+  background: var(--slide-card-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 10px;
