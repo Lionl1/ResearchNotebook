@@ -59,13 +59,16 @@ class ChromaVectorStore:
         )
 
     def _delete_by_source_ids(self, collection, source_ids: List[str]) -> None:
-        for source_id in source_ids:
-            if not source_id:
-                continue
-            try:
-                collection.delete(where={"source_id": source_id})
-            except Exception as exc:
-                logger.warning("Failed to delete vectors for source %s: %s", source_id, exc)
+        valid_ids = [sid for sid in source_ids if sid]
+        if not valid_ids:
+            return
+        try:
+            if len(valid_ids) == 1:
+                collection.delete(where={"source_id": valid_ids[0]})
+            else:
+                collection.delete(where={"source_id": {"$in": valid_ids}})
+        except Exception as exc:
+            logger.warning("Failed to delete vectors for sources %s: %s", valid_ids, exc)
 
     def _existing_source_ids(self, notebook_id: str) -> List[str]:
         try:

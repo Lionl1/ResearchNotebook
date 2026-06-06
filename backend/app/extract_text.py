@@ -27,6 +27,8 @@ _is_supported_format = None
 _settings = None
 
 if _bootstrap_extract_text():
+    import sys
+    _old_app = sys.modules.pop("app", None)
     try:
         from app.extractors import TextExtractor as _TextExtractor  # type: ignore
         from app.utils import is_supported_format as _is_supported_format  # type: ignore
@@ -35,8 +37,9 @@ if _bootstrap_extract_text():
         _AVAILABLE = True
     except Exception as exc:
         logger.warning("extract-text integration disabled: %s", exc)
-
-
+    finally:
+        if _old_app is not None:
+            sys.modules["app"] = _old_app
 _EXTRACTOR: Optional[Any] = None
 _extractor_lock = threading.Lock()
 

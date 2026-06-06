@@ -71,7 +71,7 @@ def build_chunks_from_sources(
 
 def clean_json_text(text: str) -> str:
     cleaned = text.strip()
-    cleaned = re.sub(r"```json\\s*|\\s*```", "", cleaned)
+    cleaned = re.sub(r"```(?:json)?\s*|\s*```", "", cleaned, flags=re.IGNORECASE)
     return cleaned.strip()
 
 

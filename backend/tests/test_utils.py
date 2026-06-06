@@ -41,3 +41,21 @@ def test_build_chunks_from_sources_creates_chunks():
     chunks = build_chunks_from_sources([source], max_chars=200, chunk_size=10, overlap=2)
     assert chunks
     assert chunks[0]["source_id"] == source.id
+
+
+def test_clean_json_text():
+    from backend.app.utils import clean_json_text
+    raw_json = "```json\n{\n  \"bullets\": [\"fact 1\"],\n  \"keyStats\": []\n}\n```"
+    cleaned = clean_json_text(raw_json)
+    assert "```json" not in cleaned
+    assert "```" not in cleaned
+    assert cleaned.startswith("{")
+    assert cleaned.endswith("}")
+
+
+def test_parse_json():
+    from backend.app.utils import parse_json
+    raw_json = "```json\n{\"bullets\": [\"fact 1\"], \"keyStats\": []}\n```"
+    parsed = parse_json(raw_json)
+    assert parsed == {"bullets": ["fact 1"], "keyStats": []}
+
