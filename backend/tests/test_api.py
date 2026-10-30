@@ -219,6 +219,65 @@ def test_uploaded_sources_get_unique_ids(client):
         assert response.status_code == 200
         ids.add(response.json()["id"])
     assert len(ids) == 3
+def _capture_chat_messages(monkeypatch):
+    captured = {}
+
+    async def fake_stream(messages, **__):
+        captured["messages"] = messages
+        yield "ok"
+
+    monkeypatch.setattr(chat_api, "stream_chat_completion", fake_stream)
+    return captured
+
+
+def test_chat_uses_retrieved_context_only(client, monkeypatch):
+    SOURCE_STORE.add_source(DEFAULT_NOTEBOOK_ID, _make_source("source-big", "z" * 50000))
+    monkeypatch.setattr(chat_api.VECTOR_STORE, "has", lambda _: True)
+
+    async def fake_embed_query(_):
+        return [0.1, 0.2]
+
+    monkeypatch.setattr(chat_api, "embed_query", fake_embed_query)
+    monkeypatch.setattr(
+        chat_api.VECTOR_STORE,
+        "search",
+        lambda *_: [(0.9, {"source_title": "Example", "text": "retrieved chunk"})],
+    )
+    captured = _capture_chat_messages(monkeypatch)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "Question?"}],
+            "context": "legacy client context",
+            "notebookId": DEFAULT_NOTEBOOK_ID,
+        },
+    )
+    assert response.status_code == 200
+    system_prompt = captured["messages"][0]["content"]
+    assert "retrieved chunk" in system_prompt
+    assert "z" * 100 not in system_prompt
+    assert "legacy client context" not in system_prompt
+
+
+def test_chat_without_index_falls_back_to_budgeted_sources(client, monkeypatch):
+    SOURCE_STORE.add_source(DEFAULT_NOTEBOOK_ID, _make_source("source-big", "z" * 50000))
+    monkeypatch.setattr(chat_api.VECTOR_STORE, "has", lambda _: False)
+    monkeypatch.setattr(chat_api, "CHAT_CONTEXT_CHAR_BUDGET", 1000)
+    captured = _capture_chat_messages(monkeypatch)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "messages": [{"role": "user", "content": "Question?"}],
+            "notebookId": DEFAULT_NOTEBOOK_ID,
+        },
+    )
+    assert response.status_code == 200
+    system_prompt = captured["messages"][0]["content"]
+    assert "[Source 1] Example" in system_prompt
+    assert "z" * 100 in system_prompt
+    assert "z" * 1001 not in system_prompt
 
 
 def test_projects_import_merge_preserves_existing_sources(client):
