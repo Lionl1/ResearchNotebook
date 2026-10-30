@@ -16,6 +16,8 @@ Includes a lightweight browser UI served by the backend for quick testing.
 
 ## Quick Start (Local)
 
+Requires Python 3.11+ (`.python-version` pins 3.12 for `uv`).
+
 ```bash
 uv sync --extra stt --extra ocr --extra web
 cp .env.local.example .env.local
