@@ -6,6 +6,15 @@ import httpx
 from .config import LLM_MAX_TOKENS, LLM_TIMEOUT_SECONDS, VLLM_API_BASE, VLLM_API_KEY, VLLM_MODEL
 
 
+class LLMError(RuntimeError):
+    """The OpenAI-compatible server is unreachable or returned an error."""
+
+
+def _describe(exc: httpx.HTTPError) -> str:
+    detail = str(exc) or type(exc).__name__
+    return f"LLM server at {VLLM_API_BASE} is unavailable: {detail}"
+
+
 def _headers() -> Dict[str, str]:
     headers = {"Content-Type": "application/json"}
     if VLLM_API_KEY:
@@ -34,11 +43,14 @@ async def chat_completion(
         payload["response_format"] = response_format
 
     timeout = httpx.Timeout(LLM_TIMEOUT_SECONDS)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(_chat_url(), headers=_headers(), json=payload)
-        if response.status_code >= 400:
-            raise RuntimeError(response.text)
-        return response.json()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(_chat_url(), headers=_headers(), json=payload)
+    except httpx.HTTPError as exc:
+        raise LLMError(_describe(exc)) from exc
+    if response.status_code >= 400:
+        raise LLMError(f"LLM server error {response.status_code}: {response.text}")
+    return response.json()
 
 
 async def chat_completion_text(
@@ -73,38 +85,44 @@ async def stream_chat_completion(
     }
 
     timeout = httpx.Timeout(None)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        async with client.stream(
-            "POST", _chat_url(), headers=_headers(), json=payload
-        ) as response:
-            if response.status_code >= 400:
-                text = await response.aread()
-                raise RuntimeError(text.decode("utf-8", errors="replace"))
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST", _chat_url(), headers=_headers(), json=payload
+            ) as response:
+                if response.status_code >= 400:
+                    text = await response.aread()
+                    raise LLMError(
+                        f"LLM server error {response.status_code}: "
+                        + text.decode("utf-8", errors="replace")
+                    )
 
-            async for line in response.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                data = line[len("data:") :].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    payload = json.loads(data)
-                except json.JSONDecodeError:
-                    continue
-                delta = (
-                    payload.get("choices", [{}])[0]
-                    .get("delta", {})
-                    .get("content")
-                )
-                if not delta:
-                    continue
-                if isinstance(delta, list):
-                    parts = []
-                    for item in delta:
-                        if isinstance(item, dict) and "text" in item:
-                            parts.append(item["text"])
-                        elif isinstance(item, str):
-                            parts.append(item)
-                    delta = "".join(parts)
-                if delta:
-                    yield str(delta)
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    data = line[len("data:") :].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        payload = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = (
+                        payload.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content")
+                    )
+                    if not delta:
+                        continue
+                    if isinstance(delta, list):
+                        parts = []
+                        for item in delta:
+                            if isinstance(item, dict) and "text" in item:
+                                parts.append(item["text"])
+                            elif isinstance(item, str):
+                                parts.append(item)
+                        delta = "".join(parts)
+                    if delta:
+                        yield str(delta)
+    except httpx.HTTPError as exc:
+        raise LLMError(_describe(exc)) from exc

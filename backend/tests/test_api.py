@@ -1,8 +1,12 @@
+import asyncio
 import io
 import json
 import time
 import zipfile
 
+import pytest
+
+from backend.app import llm
 from backend.app.api import chat as chat_api
 from backend.app.api import indexing as indexing_api
 from backend.app.config import DEFAULT_NOTEBOOK_ID
@@ -157,6 +161,64 @@ def test_chat_streaming(client, monkeypatch):
     )
     assert response.status_code == 200
     assert "Hello world" in response.text
+
+
+def test_chat_llm_unavailable_returns_502(client, monkeypatch):
+    async def failing_stream(*_, **__):
+        raise llm.LLMError("LLM server is unavailable")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(chat_api, "stream_chat_completion", failing_stream)
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Hi"}], "useSources": False},
+    )
+    assert response.status_code == 502
+    assert response.json()["detail"] == "LLM server is unavailable"
+
+
+def test_chat_llm_error_mid_stream_is_reported(client, monkeypatch):
+    async def broken_stream(*_, **__):
+        yield "partial"
+        raise llm.LLMError("connection reset")
+
+    monkeypatch.setattr(chat_api, "stream_chat_completion", broken_stream)
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Hi"}], "useSources": False},
+    )
+    assert response.status_code == 200
+    assert response.text.startswith("partial")
+    assert "[LLM error: connection reset]" in response.text
+
+
+def test_summary_llm_error_returns_502(client, monkeypatch):
+    async def failing_summary(*_, **__):
+        raise llm.LLMError("LLM server error 500: boom")
+
+    monkeypatch.setattr(chat_api, "chat_completion_text", failing_summary)
+    response = client.post("/api/summary", json={"context": "hello"})
+    assert response.status_code == 502
+    assert "boom" in response.json()["detail"]
+
+
+def test_llm_unreachable_raises_llm_error(monkeypatch):
+    monkeypatch.setattr(llm, "VLLM_API_BASE", "http://127.0.0.1:9/v1")
+    with pytest.raises(llm.LLMError, match="unavailable"):
+        asyncio.run(llm.chat_completion([{"role": "user", "content": "Hi"}]))
+
+
+def test_uploaded_sources_get_unique_ids(client):
+    ids = set()
+    for _ in range(3):
+        response = client.post(
+            "/api/upload",
+            files={"file": ("note.txt", b"hello", "text/plain")},
+            data={"notebookId": DEFAULT_NOTEBOOK_ID},
+        )
+        assert response.status_code == 200
+        ids.add(response.json()["id"])
+    assert len(ids) == 3
 
 
 def test_projects_import_merge_preserves_existing_sources(client):

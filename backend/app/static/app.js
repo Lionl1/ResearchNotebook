@@ -931,7 +931,8 @@ const handleChat = async (event) => {
       body: JSON.stringify(payload),
     });
     if (!res.ok || !res.body) {
-      throw new Error("Chat failed");
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || data.error || "Chat failed");
     }
 
     const reader = res.body.getReader();
