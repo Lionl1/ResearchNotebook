@@ -7,6 +7,8 @@ from ..config import CHAT_CONTEXT_CHAR_BUDGET, DEFAULT_NOTEBOOK_ID, SEARCH_TOP_K
 from ..embeddings import embed_query
 from ..llm import chat_completion_text, stream_chat_completion
 from ..models import ChatRequest, SummaryRequest
+from ..store import SOURCE_STORE
+from ..utils import build_content_from_sources
 from ..vector_store import VECTOR_STORE
 from .llm_options import resolve_llm_options
 
@@ -38,6 +40,21 @@ def _fit_context_budget(results, budget: int) -> str:
         if used >= budget:
             break
     return "\n\n".join(blocks)
+
+
+def _fallback_context(notebook_id: str, budget: int) -> str:
+    """Stored source text, capped to the same budget, for notebooks without an index."""
+    if budget <= 0:
+        return ""
+    sources = SOURCE_STORE.list_sources(notebook_id)
+    if not sources:
+        return ""
+    per_source = max(1, budget // len(sources))
+    try:
+        content = build_content_from_sources(sources, max_chars=per_source)
+    except ValueError:
+        return ""
+    return content[:budget]
 
 
 @router.post("/api/summary")
@@ -74,7 +91,6 @@ async def api_summary(payload: SummaryRequest) -> Dict[str, str]:
 @router.post("/api/chat")
 async def api_chat(payload: ChatRequest) -> StreamingResponse:
     use_sources = payload.useSources if payload.useSources is not None else True
-    context = payload.context or ""
     notebook_id = payload.notebookId or DEFAULT_NOTEBOOK_ID
     user_query = ""
     for message in reversed(payload.messages):
@@ -83,34 +99,29 @@ async def api_chat(payload: ChatRequest) -> StreamingResponse:
             break
 
     if use_sources:
-        retrieved_context = ""
+        context = ""
         if user_query and VECTOR_STORE.has(notebook_id):
             try:
                 query_embedding = await embed_query(user_query)
                 top_k = payload.topK or SEARCH_TOP_K
                 results = VECTOR_STORE.search(notebook_id, query_embedding, top_k)
                 if results:
-                    retrieved_context = _fit_context_budget(
-                        results,
-                        CHAT_CONTEXT_CHAR_BUDGET,
-                    )
+                    context = _fit_context_budget(results, CHAT_CONTEXT_CHAR_BUDGET)
             except Exception:
-                retrieved_context = ""
+                context = ""
 
-        if not retrieved_context:
-            retrieved_context = "No relevant retrieved context available."
         if not context:
-            context = "No additional source context provided."
+            context = _fallback_context(notebook_id, CHAT_CONTEXT_CHAR_BUDGET)
+        if not context:
+            context = "No source context available."
 
         system_prompt = (
             "You are HyperbookLM, an advanced research assistant. Respond in Russian. "
-            "Answer using the retrieved context FIRST. If the answer is not in the retrieved "
-            "context, use the additional sources. If still unknown, say that the answer "
-            "is not in the sources. Be concise and professional. "
-            "Do NOT output retrieved passages, chunk labels, or raw markdown. "
+            "Answer using the source context below. If the answer is not in the "
+            "context, say that the answer is not in the sources. Be concise and "
+            "professional. Do NOT output raw passages, chunk labels, or raw markdown. "
             "If helpful, cite sources as (Source N).\n\n"
-            f"Retrieved context (highest priority):\n{retrieved_context}\n\n"
-            f"Additional sources:\n{context}"
+            f"Source context:\n{context}"
         )
     else:
         system_prompt = (
