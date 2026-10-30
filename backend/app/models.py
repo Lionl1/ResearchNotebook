@@ -49,7 +49,6 @@ class SummaryRequest(LLMOptions):
 
 class ChatRequest(LLMOptions):
     messages: List[Message] = Field(default_factory=list)
-    context: Optional[str] = None
     notebookId: Optional[str] = None
     useSources: Optional[bool] = True
     topK: Optional[int] = None

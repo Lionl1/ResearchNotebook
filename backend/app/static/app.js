@@ -910,11 +910,9 @@ const handleChat = async (event) => {
   autoResizeChatInput();
 
   const useSources = chatUseSourcesToggle ? chatUseSourcesToggle.checked : true;
-  const context = useSources ? buildContext() : "";
   try {
     const payload = {
       messages: state.messages,
-      context,
       notebookId: getNotebookId(),
       useSources,
       ...buildLlmPayload(),
