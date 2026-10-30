@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from ..config import CHAT_CONTEXT_CHAR_BUDGET, DEFAULT_NOTEBOOK_ID, SEARCH_TOP_K
 from ..embeddings import embed_query
-from ..llm import chat_completion_text, stream_chat_completion
+from ..llm import LLMError, chat_completion_text, stream_chat_completion
 from ..models import ChatRequest, SummaryRequest
 from ..store import SOURCE_STORE
 from ..utils import build_content_from_sources
@@ -138,13 +138,26 @@ async def api_chat(payload: ChatRequest) -> StreamingResponse:
         0.2,
     )
 
+    tokens = stream_chat_completion(
+        messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    ).__aiter__()
+    # Wait for the first token so connection/HTTP errors surface as a 502
+    # (via the LLMError handler) instead of an empty 200 stream.
+    try:
+        first_token = await tokens.__anext__()
+    except StopAsyncIteration:
+        first_token = ""
+
     async def token_stream():
-        async for token in stream_chat_completion(
-            messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        ):
-            yield token
+        if first_token:
+            yield first_token
+        try:
+            async for token in tokens:
+                yield token
+        except LLMError as exc:
+            yield f"\n\n[LLM error: {exc}]"
 
     return StreamingResponse(
         token_stream(),

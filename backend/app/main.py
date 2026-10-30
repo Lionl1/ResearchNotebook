@@ -1,13 +1,14 @@
 from pathlib import Path
 from typing import Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import routers as api_routers
 from .config import CORS_ORIGINS
+from .llm import LLMError
 
 
 app = FastAPI(title="hyperbooklm-python")
@@ -25,6 +26,11 @@ if CORS_ORIGINS:
 
 for router in api_routers:
     app.include_router(router)
+
+
+@app.exception_handler(LLMError)
+async def llm_error_handler(_request: Request, exc: LLMError) -> JSONResponse:
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
 
 
 @app.get("/health")

@@ -1,5 +1,6 @@
 import time
 from typing import Any, Dict
+from uuid import uuid4
 
 import fitz
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -40,7 +41,7 @@ async def api_scrape(payload: ScrapeRequest) -> Dict[str, str]:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     notebook_id = payload.notebookId or DEFAULT_NOTEBOOK_ID
     source = {
-        "id": f"source-{int(time.time() * 1000)}",
+        "id": f"source-{uuid4().hex}",
         "url": final_url,
         "title": title,
         "content": content,
@@ -102,7 +103,7 @@ async def api_upload(
     title = filename.rsplit(".", 1)[0]
     notebook_id = notebookId or DEFAULT_NOTEBOOK_ID
     source = {
-        "id": f"file-{int(time.time() * 1000)}",
+        "id": f"file-{uuid4().hex}",
         "url": filename,
         "title": title,
         "text": text,
@@ -142,7 +143,7 @@ async def api_stt(
     title = (file.filename or "audio").rsplit(".", 1)[0]
     notebook_id = notebookId or DEFAULT_NOTEBOOK_ID
     source = {
-        "id": f"audio-{int(time.time() * 1000)}",
+        "id": f"audio-{uuid4().hex}",
         "url": file.filename or "audio",
         "title": title,
         "text": text,
