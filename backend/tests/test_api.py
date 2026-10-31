@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 import json
 import time
@@ -258,6 +259,67 @@ def test_chat_uses_retrieved_context_only(client, monkeypatch):
     assert "retrieved chunk" in system_prompt
     assert "z" * 100 not in system_prompt
     assert "legacy client context" not in system_prompt
+
+
+def _decode_citations(response):
+    return json.loads(base64.b64decode(response.headers["X-Chat-Sources"]))
+
+
+def test_chat_returns_citations_for_retrieved_chunks(client, monkeypatch):
+    monkeypatch.setattr(chat_api.VECTOR_STORE, "has", lambda _: True)
+
+    async def fake_embed_query(_):
+        return [0.1, 0.2]
+
+    monkeypatch.setattr(chat_api, "embed_query", fake_embed_query)
+    monkeypatch.setattr(
+        chat_api.VECTOR_STORE,
+        "search",
+        lambda *_: [
+            (0.9, {"source_id": "s-1", "source_title": "Статья", "source_url": "u1", "text": "первый"}),
+            (0.8, {"source_id": "s-2", "source_title": "B", "source_url": "u2", "text": "w" * 1000}),
+        ],
+    )
+    _capture_chat_messages(monkeypatch)
+
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Q"}], "notebookId": DEFAULT_NOTEBOOK_ID},
+    )
+    citations = _decode_citations(response)
+    assert [c["n"] for c in citations] == [1, 2]
+    assert citations[0] == {
+        "n": 1,
+        "sourceId": "s-1",
+        "title": "Статья",
+        "url": "u1",
+        "snippet": "первый",
+    }
+    assert len(citations[1]["snippet"]) <= chat_api.CITATION_SNIPPET_CHARS + 3
+
+
+def test_chat_fallback_citations_match_prompt_numbering(client, monkeypatch):
+    SOURCE_STORE.add_source(DEFAULT_NOTEBOOK_ID, _make_source("source-a", "alpha"))
+    SOURCE_STORE.add_source(DEFAULT_NOTEBOOK_ID, _make_source("source-b", "beta"))
+    monkeypatch.setattr(chat_api.VECTOR_STORE, "has", lambda _: False)
+    captured = _capture_chat_messages(monkeypatch)
+
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Q"}], "notebookId": DEFAULT_NOTEBOOK_ID},
+    )
+    citations = _decode_citations(response)
+    assert [(c["n"], c["sourceId"]) for c in citations] == [(1, "source-a"), (2, "source-b")]
+    assert "[Source 2] Example" in captured["messages"][0]["content"]
+
+
+def test_chat_without_sources_has_no_citations(client, monkeypatch):
+    _capture_chat_messages(monkeypatch)
+    response = client.post(
+        "/api/chat",
+        json={"messages": [{"role": "user", "content": "Q"}], "useSources": False},
+    )
+    assert _decode_citations(response) == []
 
 
 def test_chat_without_index_falls_back_to_budgeted_sources(client, monkeypatch):

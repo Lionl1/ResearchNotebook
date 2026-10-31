@@ -22,6 +22,7 @@ if CORS_ORIGINS:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Chat-Sources"],
     )
 
 for router in api_routers:
