@@ -357,6 +357,7 @@ const renderSources = () => {
   state.sources.forEach((source) => {
     const item = document.createElement("div");
     item.className = "list-item";
+    item.dataset.sourceId = source.id;
     item.innerHTML = `
       <strong>${source.title || source.url}</strong><br />
       <small>${source.url}</small><br />
@@ -470,15 +471,93 @@ const renderMarkdown = (input) => {
   return html.join("\n");
 };
 
+const decodeCitations = (header) => {
+  if (!header) return [];
+  try {
+    const bytes = Uint8Array.from(atob(header), (c) => c.charCodeAt(0));
+    const parsed = JSON.parse(new TextDecoder().decode(bytes));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const CITATION_BUTTON = '<button type="button" class="citation" data-n="[0-9]+">[0-9]+</button>';
+const CITATION_GROUP_RE = new RegExp(
+  `[(\\[]\\s*(${CITATION_BUTTON}(?:\\s*[,;]\\s*${CITATION_BUTTON})*)\\s*[)\\]]`,
+  "g"
+);
+
+// Turns "(Source 2)" / "[Источник 2]" in rendered HTML into clickable markers.
+const linkCitations = (html, citations) => {
+  if (!citations || !citations.length) return html;
+  const known = new Set(citations.map((c) => String(c.n)));
+  const withButtons = html.replace(/(?:Source|Источник)\s*(\d+)/gi, (match, n) =>
+    known.has(n) ? `<button type="button" class="citation" data-n="${n}">${n}</button>` : match
+  );
+  return withButtons.replace(CITATION_GROUP_RE, "$1");
+};
+
+const renderCitationPreview = (citation) => {
+  const title = escapeHtml(citation.title || citation.url || `Source ${citation.n}`);
+  const url = citation.url && citation.url !== citation.title
+    ? `<small>${escapeHtml(citation.url)}</small>`
+    : "";
+  return `
+    <div class="citation-preview">
+      <strong>[${citation.n}] ${title}</strong>
+      ${url}
+      <p>${escapeHtml(citation.snippet || "")}</p>
+    </div>
+  `;
+};
+
+const highlightSource = (sourceId) => {
+  if (!sourceId || !sourcesList) return;
+  const item = Array.from(sourcesList.querySelectorAll(".list-item")).find(
+    (node) => node.dataset.sourceId === sourceId
+  );
+  if (!item) return;
+  item.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  item.classList.remove("source-highlight");
+  void item.offsetWidth;
+  item.classList.add("source-highlight");
+};
+
 const renderChat = () => {
   chatMessages.innerHTML = "";
-  state.messages.forEach((message) => {
+  state.messages.forEach((message, index) => {
     const item = document.createElement("div");
     item.className = `chat-message ${message.role}`;
-    item.innerHTML = renderMarkdown(message.content);
+    item.dataset.index = String(index);
+    let html = renderMarkdown(message.content);
+    if (message.role === "assistant") {
+      html = linkCitations(html, message.citations);
+      const open = (message.citations || []).find((c) => c.n === message.openCitation);
+      if (open) html += renderCitationPreview(open);
+    }
+    item.innerHTML = html;
+    item.querySelectorAll(".citation").forEach((button) => {
+      if (Number(button.dataset.n) === message.openCitation) button.classList.add("active");
+    });
     chatMessages.appendChild(item);
   });
   chatMessages.scrollTop = chatMessages.scrollHeight;
+};
+
+const handleCitationClick = (event) => {
+  const button = event.target.closest(".citation");
+  if (!button) return;
+  const messageEl = button.closest(".chat-message");
+  const message = messageEl ? state.messages[Number(messageEl.dataset.index)] : null;
+  if (!message) return;
+  const n = Number(button.dataset.n);
+  message.openCitation = message.openCitation === n ? null : n;
+  const scrollTop = chatMessages.scrollTop;
+  renderChat();
+  chatMessages.scrollTop = scrollTop;
+  const citation = (message.citations || []).find((c) => c.n === n);
+  if (message.openCitation && citation) highlightSource(citation.sourceId);
 };
 
 const toggleSources = () => {
@@ -912,7 +991,7 @@ const handleChat = async (event) => {
   const useSources = chatUseSourcesToggle ? chatUseSourcesToggle.checked : true;
   try {
     const payload = {
-      messages: state.messages,
+      messages: state.messages.map(({ role, content }) => ({ role, content })),
       notebookId: getNotebookId(),
       useSources,
       ...buildLlmPayload(),
@@ -936,7 +1015,12 @@ const handleChat = async (event) => {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let assistantText = "";
-    const assistant = { role: "assistant", content: "" };
+    const assistant = {
+      role: "assistant",
+      content: "",
+      citations: decodeCitations(res.headers.get("X-Chat-Sources")),
+      openCitation: null,
+    };
     state.messages.push(assistant);
     renderChat();
 
@@ -1234,6 +1318,7 @@ document.querySelectorAll(".summary-btn").forEach((button) => {
 el("mindmap-btn").addEventListener("click", handleMindmap);
 el("slides-btn").addEventListener("click", handleSlides);
 el("chat-form").addEventListener("submit", handleChat);
+chatMessages.addEventListener("click", handleCitationClick);
 el("chat-input").addEventListener("keydown", handleChatKeydown);
 el("chat-input").addEventListener("input", autoResizeChatInput);
 el("clear-btn").addEventListener("click", handleClear);

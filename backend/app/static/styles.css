@@ -555,6 +555,66 @@ button:disabled {
   background: var(--message-assistant-bg);
 }
 
+.chat-message .citation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  margin: 0 2px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--ink);
+  font-size: 0.75em;
+  line-height: 1;
+  vertical-align: super;
+  cursor: pointer;
+}
+
+.chat-message .citation:hover,
+.chat-message .citation.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.citation-preview {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  font-size: 0.9em;
+}
+
+.citation-preview small {
+  display: block;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.citation-preview p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+.list-item.source-highlight {
+  animation: source-highlight 2s ease-out;
+}
+
+@keyframes source-highlight {
+  0%,
+  40% {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 2px var(--ink);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
 .chat-input {
   display: flex;
   gap: 8px;
